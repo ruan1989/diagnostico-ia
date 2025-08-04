@@ -1,0 +1,38 @@
+[
+  {
+    "sintoma": "dor de cabeça",
+    "doencas": [
+      "enxaqueca",
+      "tensão muscular",
+      "sinusite",
+      "desidratação"
+    ]
+  },
+  {
+    "sintoma": "febre",
+    "doencas": [
+      "infecção viral",
+      "infecção bacteriana",
+      "dengue",
+      "gripe"
+    ]
+  },
+  {
+    "sintoma": "tosse",
+    "doencas": [
+      "gripe",
+      "resfriado",
+      "bronquite",
+      "asma"
+    ]
+  },
+  {
+    "sintoma": "dor abdominal",
+    "doencas": [
+      "gastrite",
+      "infecção intestinal",
+      "apendicite",
+      "cólica"
+    ]
+  }
+]
