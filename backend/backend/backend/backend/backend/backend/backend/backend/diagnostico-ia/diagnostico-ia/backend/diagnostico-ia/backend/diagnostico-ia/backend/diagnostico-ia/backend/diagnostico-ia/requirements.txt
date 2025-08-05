@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pymongo
+firebase-admin
+transformers
+pydantic
