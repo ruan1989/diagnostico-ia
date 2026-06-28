@@ -1,0 +1,159 @@
+[
+  {
+    "doenca": "Gripe",
+    "tratamentos": [
+      "Chá de gengibre com mel e limão — propriedades anti-inflamatórias e antioxidantes",
+      "Chá de eucalipto — alivia congestão nasal e tosse",
+      "Inalação com vapor de água e hortelã — desobstrui vias respiratórias",
+      "Caldo de galinha quente — hidratação e conforto",
+      "Repouso absoluto — fundamental para recuperação",
+      "Vitamina C (frutas cítricas) — fortalece o sistema imunológico"
+    ]
+  },
+  {
+    "doenca": "Dengue",
+    "tratamentos": [
+      "Hidratação intensa com água e soro de reidratação oral",
+      "Chá de papaia — plaquetônico natural, auxilia na recuperação",
+      "Repouso absoluto — reduz risco de complicações",
+      "Compressas frias para controle da febre",
+      "Suco de caju — rico em vitamina C e antioxidantes"
+    ]
+  },
+  {
+    "doenca": "Covid-19",
+    "tratamentos": [
+      "Repouso e isolamento — essenciais para recuperação e prevenção de contágio",
+      "Hidratação com água, sucos naturais e chás mornos",
+      "Chá de gengibre com limão — alivia dor de garganta",
+      "Vaporizações com eucalipto — melhora respiração",
+      "Monitoramento da saturação de oxigênio com oxímetro",
+      "Vitamina D e Zinco — suporte imunológico"
+    ]
+  },
+  {
+    "doenca": "Rinite Alérgica",
+    "tratamentos": [
+      "Lavagem nasal com solução salina — remove alérgenos das vias nasais",
+      "Evitar tapetes, cortinas e ambientes com mofo",
+      "Usar filtros de ar HEPA — reduz alérgenos no ambiente",
+      "Chá de urtiga — propriedades anti-histamínicas naturais",
+      "Mel local — dessensibilização gradual ao pólen"
+    ]
+  },
+  {
+    "doenca": "Gastrite",
+    "tratamentos": [
+      "Chá de camomila — anti-inflamatório e calmante gástrico",
+      "Chá de erva-doce — reduz gases e espasmos",
+      "Babosa (aloe vera) — cicatrizante da mucosa gástrica",
+      "Dieta bland: arroz, frango grelhado, banana, maçã cozida",
+      "Evitar álcool, café e alimentos condimentados",
+      "Comer em porções menores e mais vezes ao dia"
+    ]
+  },
+  {
+    "doenca": "Hipertensão",
+    "tratamentos": [
+      "Dieta DASH — rica em frutas, vegetais e pobre em sódio",
+      "Chá de hibisco — reduz naturalmente a pressão arterial",
+      "Atividade física regular (30 min/dia) — caminhada, natação",
+      "Redução do consumo de sal — menos de 5g por dia",
+      "Técnicas de relaxamento — yoga e meditação",
+      "Alho cru — propriedades vasodilatadoras"
+    ]
+  },
+  {
+    "doenca": "Diabetes",
+    "tratamentos": [
+      "Dieta com baixo índice glicêmico — vegetais, grãos integrais",
+      "Canela — melhora sensibilidade à insulina",
+      "Atividade física regular — caminhada após refeições",
+      "Chá de pata-de-vaca — hipoglicemiante natural",
+      "Controle de porções e horários regulares de refeições",
+      "Chá verde — auxilia no metabolismo da glicose"
+    ]
+  },
+  {
+    "doenca": "Conjuntivite",
+    "tratamentos": [
+      "Compressa com chá de camomila frio — anti-inflamatório ocular",
+      "Higiene rigorosa das mãos para evitar contágio",
+      "Lavar os olhos com soro fisiológico",
+      "Não compartilhar toalhas ou fronhas",
+      "Compressa fria com pano limpo — alivia coceira e vermelhidão"
+    ]
+  },
+  {
+    "doenca": "Amigdalite",
+    "tratamentos": [
+      "Gargarejo com água morna e sal — reduz inflamação",
+      "Mel puro — antimicrobiano natural, alivia dor",
+      "Chá de própolis — anti-inflamatório e antisséptico",
+      "Gelo ou sorvete — alívio da dor por crioterapia",
+      "Chá de sálvia com mel — cicatrizante e antisséptico"
+    ]
+  },
+  {
+    "doenca": "Otite",
+    "tratamentos": [
+      "Compressas mornas sobre o ouvido — alivia dor",
+      "Azeite morno com alho — antisséptico natural (uso externo)",
+      "Evitar umidade e água no ouvido",
+      "Repouso com cabeça levemente elevada"
+    ]
+  },
+  {
+    "doenca": "Ansiedade",
+    "tratamentos": [
+      "Respiração diafragmática — 4s inspirar, 7s segurar, 8s expirar",
+      "Meditação mindfulness — 10 minutos diários",
+      "Chá de maracujá — ansiolítico natural",
+      "Chá de valeriana — calmante e indutor do sono",
+      "Atividade física regular — libera endorfinas",
+      "Caminhada ao ar livre — reduz cortisol"
+    ]
+  },
+  {
+    "doenca": "Enxaqueca",
+    "tratamentos": [
+      "Compressas frias na testa e nuca",
+      "Repouso em ambiente escuro e silencioso",
+      "Chá de gengibre — reduz inflamação e náuseas",
+      "Massagem na têmpora com óleo de hortelã-pimenta",
+      "Hidratação adequada — desidratação é fator desencadeante",
+      "Identificar e evitar gatilhos: estresse, certos alimentos"
+    ]
+  },
+  {
+    "doenca": "Infecção Urinária",
+    "tratamentos": [
+      "Hidratação intensa — pelo menos 2L de água por dia",
+      "Suco de cranberry — impede adesão bacteriana na bexiga",
+      "Chá de cavalinha — diurético natural",
+      "Compressas mornas no abdome inferior — alívio da dor",
+      "Chá de uva-ursi — antibacteriano natural para vias urinárias"
+    ]
+  },
+  {
+    "doenca": "Pneumonia",
+    "tratamentos": [
+      "Repouso absoluto e ambiente arejado",
+      "Hidratação intensa para fluidificar secreções",
+      "Chá de eucalipto — expectorante natural",
+      "Fisioterapia respiratória para mobilizar secreções",
+      "Mel com própolis — anti-inflamatório respiratório"
+    ]
+  },
+  {
+    "doenca": "Depressão",
+    "tratamentos": [
+      "Atividade física regular — 30 min de exercício aeróbico, 3x/semana",
+      "Exposição solar diária — estimula produção de serotonina",
+      "Terapia psicológica (TCC) — fundamental para tratamento",
+      "Chá de erva de São João (hipericão) — antidepressivo leve",
+      "Alimentação rica em ômega-3 — sardinha, atum, linhaça",
+      "Rotina de sono regular — dormir e acordar nos mesmos horários"
+    ]
+  }
+]

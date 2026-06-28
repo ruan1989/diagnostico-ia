@@ -1,0 +1,154 @@
+[
+  {
+    "doenca": "Gripe",
+    "tratamentos": [
+      "Paracetamol 500–750mg a cada 6h — analgésico e antitérmico",
+      "Ibuprofeno 400mg a cada 8h — anti-inflamatório (evitar na dengue)",
+      "Loratadina 10mg/dia — anti-histamínico para coriza",
+      "Pseudoefedrina — descongestionante nasal",
+      "Ambroxol — mucolítico para tosse produtiva",
+      "Oseltamivir (Tamiflu) — antiviral em casos graves ou grupos de risco"
+    ]
+  },
+  {
+    "doenca": "Dengue",
+    "tratamentos": [
+      "Paracetamol 500–750mg a cada 6h — único analgésico/antitérmico permitido",
+      "ATENÇÃO: AAS, Ibuprofeno e outros AINEs são CONTRAINDICADOS",
+      "Soro de reidratação oral — manutenção do volume circulatório",
+      "Soro intravenoso — em casos de dengue grave (hospitalar)"
+    ]
+  },
+  {
+    "doenca": "Covid-19",
+    "tratamentos": [
+      "Paracetamol 500–750mg a cada 6h — controle de febre e dor",
+      "Paxlovid (Nirmatrelvir/Ritonavir) — antiviral para casos moderados em risco",
+      "Corticoides (Dexametasona) — apenas em casos graves com hipóxia",
+      "Anticoagulante profilático — em internação hospitalar",
+      "Suplementação: Vitamina D, Zinco, Vitamina C"
+    ]
+  },
+  {
+    "doenca": "Rinite Alérgica",
+    "tratamentos": [
+      "Loratadina 10mg/dia — anti-histamínico não sedante",
+      "Cetirizina 10mg/dia — anti-histamínico de 2ª geração",
+      "Fexofenadina 120–180mg/dia — anti-histamínico sem sedação",
+      "Budesonida spray nasal — corticoide tópico para uso contínuo",
+      "Fluticasona spray nasal — anti-inflamatório tópico nasal"
+    ]
+  },
+  {
+    "doenca": "Gastrite",
+    "tratamentos": [
+      "Omeprazol 20–40mg/dia em jejum — inibidor da bomba de prótons",
+      "Pantoprazol 40mg/dia — alternativa ao omeprazol",
+      "Hidróxido de Alumínio/Magnésio (Mylanta) — antiácido de alívio rápido",
+      "Ranitidina 150mg 2x/dia — bloqueador H2 (se disponível)",
+      "Sucralfato — protetor da mucosa gástrica",
+      "Amoxicilina + Claritromicina + Omeprazol — se H. pylori positivo (14 dias)"
+    ]
+  },
+  {
+    "doenca": "Hipertensão",
+    "tratamentos": [
+      "Losartana 50–100mg/dia — bloqueador do receptor de angiotensina",
+      "Enalapril 5–20mg/dia — inibidor da ECA",
+      "Anlodipino 5–10mg/dia — bloqueador de canal de cálcio",
+      "Hidroclorotiazida 12,5–25mg/dia — diurético tiazídico",
+      "Atenolol 25–100mg/dia — betabloqueador"
+    ]
+  },
+  {
+    "doenca": "Diabetes",
+    "tratamentos": [
+      "Metformina 500–2000mg/dia — primeira linha para DM tipo 2",
+      "Glibenclamida 5–20mg/dia — sulfonilureia estimuladora de insulina",
+      "Insulina NPH ou Regular — diabetes tipo 1 ou tipo 2 avançado",
+      "Empagliflozina 10–25mg/dia — inibidor SGLT2, cardioprotector",
+      "Sitagliptina 100mg/dia — inibidor DPP-4"
+    ]
+  },
+  {
+    "doenca": "Conjuntivite",
+    "tratamentos": [
+      "Tobramicina colírio 0,3% — antibiótico tópico (bacteriana)",
+      "Ciprofloxacino colírio 0,3% — antibiótico de amplo espectro",
+      "Cetorolaco colírio — anti-inflamatório ocular (alérgica)",
+      "Olopatadina colírio — anti-histamínico ocular (alérgica)",
+      "Aciclovir pomada oftálmica — antiviral (herpética)"
+    ]
+  },
+  {
+    "doenca": "Amigdalite",
+    "tratamentos": [
+      "Amoxicilina 500mg 3x/dia por 10 dias — primeira linha bacteriana",
+      "Azitromicina 500mg/dia por 5 dias — alternativa para alérgicos à penicilina",
+      "Paracetamol 750mg a cada 6h — analgésico e antitérmico",
+      "Ibuprofeno 400mg a cada 8h — anti-inflamatório",
+      "Benzidamina spray — anestésico local para dor de garganta"
+    ]
+  },
+  {
+    "doenca": "Otite",
+    "tratamentos": [
+      "Ciprofloxacino + Dexametasona gotas otológicas — antibiótico + anti-inflamatório tópico",
+      "Amoxicilina 500mg 3x/dia por 7–10 dias — antibiótico sistêmico (otite média)",
+      "Paracetamol 750mg a cada 6h — controle da dor",
+      "Ibuprofeno 400mg a cada 8h — anti-inflamatório e analgésico"
+    ]
+  },
+  {
+    "doenca": "Ansiedade",
+    "tratamentos": [
+      "Escitalopram 10–20mg/dia — ISRS de primeira linha",
+      "Sertralina 50–200mg/dia — ISRS, eficaz para TAG e pânico",
+      "Alprazolam 0,25–0,5mg 3x/dia — benzodiazepínico para uso agudo (curto prazo)",
+      "Buspirona 5–30mg/dia — ansiolítico não benzodiazepínico",
+      "Venlafaxina 75–225mg/dia — IRSN para ansiedade generalizada"
+    ]
+  },
+  {
+    "doenca": "Enxaqueca",
+    "tratamentos": [
+      "Sumatriptano 50–100mg — triptano de primeira escolha na crise",
+      "Rizatriptano 10mg — triptano de ação rápida",
+      "Ibuprofeno 600mg — analgésico para crises leves a moderadas",
+      "Metoclopramida 10mg — antiemético para náuseas associadas",
+      "Topiramato 25–100mg/dia — profilático para enxaqueca frequente",
+      "Amitriptilina 25–75mg à noite — profilático"
+    ]
+  },
+  {
+    "doenca": "Infecção Urinária",
+    "tratamentos": [
+      "Nitrofurantoína 100mg 2x/dia por 5 dias — primeira linha ITU não complicada",
+      "Fosfomicina 3g dose única — alternativa cômoda",
+      "Sulfametoxazol + Trimetoprim 800/160mg 2x/dia por 3–7 dias",
+      "Ciprofloxacino 500mg 2x/dia por 3 dias — casos de resistência",
+      "Fenazol 100mg 3x/dia — analgésico urinário (alívio sintomático)"
+    ]
+  },
+  {
+    "doenca": "Pneumonia",
+    "tratamentos": [
+      "Amoxicilina-Clavulanato 875/125mg 2x/dia por 7–10 dias — ambulatorial",
+      "Azitromicina 500mg/dia por 5 dias — atípica ou alérgicos",
+      "Levofloxacino 750mg/dia por 5 dias — casos moderados",
+      "Ceftriaxona IV 1–2g/dia — internação hospitalar",
+      "Corticoide sistêmico — casos graves com hipóxia"
+    ]
+  },
+  {
+    "doenca": "Depressão",
+    "tratamentos": [
+      "Sertralina 50–200mg/dia — ISRS, primeira linha",
+      "Escitalopram 10–20mg/dia — ISRS com boa tolerabilidade",
+      "Fluoxetina 20–60mg/dia — ISRS clássico",
+      "Venlafaxina 75–225mg/dia — IRSN para depressão grave",
+      "Bupropiona 150–300mg/dia — alternativa sem disfunção sexual",
+      "Amitriptilina 25–150mg/dia — tricíclico para casos refratários"
+    ]
+  }
+]
