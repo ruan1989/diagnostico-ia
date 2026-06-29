@@ -60,9 +60,7 @@ async function buscarOfertas() {
         headers: { Authorization: `Bearer ${token}` },
         params: {
           category: categoria,
-          sort: 'price_asc',
-          promotions: 'DEAL_OF_THE_DAY,LIGHTNING_DEAL',
-          limit: 20,
+          limit: 50,
         },
       });
 
@@ -72,7 +70,9 @@ async function buscarOfertas() {
         const precoOriginal = item.original_price;
         const precoAtual    = item.price;
         const desconto      = calcDesconto(precoOriginal, precoAtual);
-        const reputacao     = item.seller?.seller_reputation?.transactions?.ratings?.positive || 0;
+        // API retorna positive em escala 0-1 (ex: 0.95 = 95%); normaliza para 0-5
+        const reputacaoRaw  = item.seller?.seller_reputation?.transactions?.ratings?.positive || 0;
+        const reputacao     = reputacaoRaw * 5;
 
         if (desconto < MIN_DISCOUNT) continue;
         if (reputacao < MIN_SCORE && reputacao > 0) continue;
