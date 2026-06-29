@@ -1,0 +1,77 @@
+[
+  {
+    "doenca": "Gripe",
+    "sintomas": ["febre", "tosse", "dor de cabeça", "coriza", "mal-estar", "calafrio", "dor no corpo", "cansaço"],
+    "tratamentos": ["repouso", "hidratação", "antitérmico"]
+  },
+  {
+    "doenca": "Dengue",
+    "sintomas": ["febre alta", "dor atrás dos olhos", "manchas vermelhas", "dor nas articulações", "náusea", "vômito", "fadiga intensa"],
+    "tratamentos": ["repouso", "hidratação", "paracetamol"]
+  },
+  {
+    "doenca": "Covid-19",
+    "sintomas": ["febre", "tosse seca", "falta de ar", "perda de olfato", "perda de paladar", "cansaço", "dor de garganta", "dificuldade respirar"],
+    "tratamentos": ["isolamento", "repouso", "hidratação", "monitorar saturação"]
+  },
+  {
+    "doenca": "Rinite Alérgica",
+    "sintomas": ["espirros", "coriza", "coceira no nariz", "olhos lacrimejando", "nariz entupido", "coceira nos olhos"],
+    "tratamentos": ["anti-histamínico", "descongestionante nasal", "evitar alérgenos"]
+  },
+  {
+    "doenca": "Gastrite",
+    "sintomas": ["dor no estômago", "queimação", "azia", "náusea", "vômito", "estômago cheio", "eructação", "enjoo"],
+    "tratamentos": ["antiácido", "dieta leve", "omeprazol"]
+  },
+  {
+    "doenca": "Hipertensão",
+    "sintomas": ["dor de cabeça na nuca", "tontura", "zumbido no ouvido", "visão turva", "palpitações", "sangramento nasal"],
+    "tratamentos": ["controle da dieta", "atividade física", "anti-hipertensivo"]
+  },
+  {
+    "doenca": "Diabetes",
+    "sintomas": ["sede excessiva", "urinar frequente", "cansaço", "visão turva", "feridas que não cicatrizam", "formigamento nos pés", "fome excessiva"],
+    "tratamentos": ["controle glicêmico", "dieta", "insulina ou hipoglicemiante"]
+  },
+  {
+    "doenca": "Conjuntivite",
+    "sintomas": ["olhos vermelhos", "coceira nos olhos", "olhos lacrimejando", "secreção nos olhos", "sensação de areia nos olhos"],
+    "tratamentos": ["colírio", "higiene ocular", "compressa fria"]
+  },
+  {
+    "doenca": "Amigdalite",
+    "sintomas": ["dor de garganta", "dificuldade engolir", "febre", "gânglios inchados", "garganta vermelha", "placas na garganta"],
+    "tratamentos": ["antibiótico", "analgésico", "gargarejo com água morna e sal"]
+  },
+  {
+    "doenca": "Otite",
+    "sintomas": ["dor de ouvido", "ouvido tapado", "zumbido", "febre", "dificuldade ouvir", "secreção no ouvido"],
+    "tratamentos": ["gotas otológicas", "antibiótico", "analgésico"]
+  },
+  {
+    "doenca": "Ansiedade",
+    "sintomas": ["agitação", "coração acelerado", "suor excessivo", "tremor", "dificuldade concentrar", "insônia", "tensão muscular", "preocupação excessiva"],
+    "tratamentos": ["terapia", "técnicas de respiração", "meditação", "ansiolítico"]
+  },
+  {
+    "doenca": "Enxaqueca",
+    "sintomas": ["dor de cabeça intensa", "náusea", "sensibilidade à luz", "sensibilidade ao som", "visão com aura", "vômito"],
+    "tratamentos": ["triptano", "repouso em ambiente escuro", "compressas frias"]
+  },
+  {
+    "doenca": "Infecção Urinária",
+    "sintomas": ["ardência ao urinar", "urinar frequente", "urina turva", "dor na bexiga", "urgência urinária", "urina com odor forte"],
+    "tratamentos": ["antibiótico", "hidratação", "cranberry"]
+  },
+  {
+    "doenca": "Pneumonia",
+    "sintomas": ["febre alta", "tosse com catarro", "falta de ar", "dor no peito", "calafrio", "cansaço extremo"],
+    "tratamentos": ["antibiótico", "repouso", "fisioterapia respiratória"]
+  },
+  {
+    "doenca": "Depressão",
+    "sintomas": ["tristeza persistente", "perda de interesse", "cansaço", "insônia", "falta de apetite", "dificuldade concentrar", "pensamentos negativos"],
+    "tratamentos": ["terapia", "antidepressivo", "atividade física", "apoio social"]
+  }
+]
