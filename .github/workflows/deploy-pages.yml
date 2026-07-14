@@ -1,0 +1,43 @@
+name: Deploy Company OS Landing to GitHub Pages
+
+# Publica ai-company-os/landing/ como site público no GitHub Pages.
+# Auto-habilita o Pages (enablement: true) na primeira execução.
+on:
+  push:
+    branches: [main, claude/ai-company-os-platform-7b8eqa]
+    paths:
+      - "ai-company-os/landing/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Pages (auto-enable)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Upload landing as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ai-company-os/landing
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Ping IndexNow (Bing/Yandex/Seznam)
+        run: node ai-company-os/scripts/submit-indexnow.mjs
+        continue-on-error: true

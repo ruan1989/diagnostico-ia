@@ -1,0 +1,19 @@
+{
+  "name": "Company OS",
+  "short_name": "Company OS",
+  "description": "O sistema operacional da sua empresa, operado por conversa com IA.",
+  "start_url": "/diagnostico-ia/",
+  "scope": "/diagnostico-ia/",
+  "display": "standalone",
+  "background_color": "#0a0e17",
+  "theme_color": "#5b8cff",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "og-image.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

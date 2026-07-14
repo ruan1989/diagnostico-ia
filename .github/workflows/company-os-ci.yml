@@ -1,10 +1,12 @@
-name: CI
+name: Company OS CI
 
+# CI do Company OS (na raiz correta do repo para o GitHub Actions enxergar).
 on:
   push:
-    paths: ["ai-company-os/**"]
+    paths: ["ai-company-os/**", ".github/workflows/company-os-ci.yml"]
   pull_request:
     paths: ["ai-company-os/**"]
+  workflow_dispatch:
 
 jobs:
   build-and-test:

@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://companyos.ai/sitemap.xml
+Sitemap: https://ruan1989.github.io/diagnostico-ia/sitemap.xml
