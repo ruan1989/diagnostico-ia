@@ -20,6 +20,12 @@ const PT: Dict = {
   merchantReceives: "O dono recebe",
   close: "Fechar",
   globalNote: "Pague na sua moeda local; o dono do sistema recebe na moeda que preferir.",
+  heroSub: "Agentes de IA executam CRM, financeiro, funil e mais — funciona 100% no seu navegador.",
+  f1t: "💬 Uma tela", f1d: "Tudo por conversa, sem menus.",
+  f2t: "🤖 Agentes que executam", f2d: "Vendas, Financeiro, RH — colaboram e agem.",
+  f3t: "🌍 Pagamentos globais", f3d: "PIX, cartão, cripto. Receba na sua moeda.",
+  f4t: "🔒 Seguro", f4d: "Seus dados ficam no seu dispositivo.",
+  demoNote: "Demonstração funcional — os dados ficam salvos só no seu navegador.",
 };
 
 const EN: Dict = {
@@ -40,6 +46,12 @@ const EN: Dict = {
   merchantReceives: "Owner receives",
   close: "Close",
   globalNote: "Pay in your local currency; the owner is paid out in the currency they choose.",
+  heroSub: "AI agents run CRM, finance, funnel and more — works 100% in your browser.",
+  f1t: "💬 One screen", f1d: "Everything by chat, no menus.",
+  f2t: "🤖 Agents that execute", f2d: "Sales, Finance, HR — they collaborate and act.",
+  f3t: "🌍 Global payments", f3d: "PIX, card, crypto. Get paid in your currency.",
+  f4t: "🔒 Secure", f4d: "Your data stays on your device.",
+  demoNote: "Functional demo — data is saved only in your browser.",
 };
 
 const SUGGESTIONS: Record<Lang, string[]> = {

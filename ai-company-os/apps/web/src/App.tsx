@@ -63,12 +63,22 @@ export function App() {
         {turns.length === 0 && (
           <div className="welcome">
             <h1>{t(lang, "tagline")}</h1>
-            <p>{t(lang, "intro")}</p>
+            <p className="hero-sub">{t(lang, "heroSub")}</p>
+            <div className="feature-grid">
+              {[["f1t", "f1d"], ["f2t", "f2d"], ["f3t", "f3d"], ["f4t", "f4d"]].map(([tt, dd]) => (
+                <div key={tt} className="feature">
+                  <div className="feature-t">{t(lang, tt)}</div>
+                  <div className="feature-d">{t(lang, dd)}</div>
+                </div>
+              ))}
+            </div>
+            <p className="intro">{t(lang, "intro")}</p>
             <div className="chips">
               {suggestions(lang).map((s) => (
                 <button key={s} className="chip" onClick={() => submit(s)}>{s}</button>
               ))}
             </div>
+            <p className="demo-note">{t(lang, "demoNote")}</p>
           </div>
         )}
 
