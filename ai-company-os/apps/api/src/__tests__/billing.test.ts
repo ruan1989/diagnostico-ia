@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BillingService } from "../billing/billing.service.js";
 import { ExchangeRate, Money } from "../billing/money.js";
+import { hmacSign } from "../platform/crypto.js";
 
 describe("Billing global (pague na sua moeda, receba na minha)", () => {
   it("converte entre fiat e cripto", () => {
@@ -58,5 +59,42 @@ describe("Billing global (pague na sua moeda, receba na minha)", () => {
     expect(billing.paymentOptions("IN").methods.map((m) => m.id)).toContain("upi");
     expect(billing.paymentOptions("DE").localCurrency).toBe("EUR");
     expect(billing.paymentOptions("ZZ").country).toBe("XX"); // fallback global
+  });
+});
+
+describe("Segurança de pagamento", () => {
+  it("idempotência: mesma chave não gera cobrança duplicada", async () => {
+    const billing = new BillingService("BRL", "BRL");
+    const a = await billing.subscribe("starter", "monthly", "BR", "pix", { idempotencyKey: "k1" });
+    const b = await billing.subscribe("starter", "monthly", "BR", "pix", { idempotencyKey: "k1" });
+    expect(a.intent.id).toBe(b.intent.id);
+    // chave diferente → cobrança diferente
+    const cc = await billing.subscribe("starter", "monthly", "BR", "pix", { idempotencyKey: "k2" });
+    expect(cc.intent.id).not.toBe(a.intent.id);
+  });
+
+  it("webhook: aceita assinatura válida e atualiza status", async () => {
+    const secret = "wh-secret";
+    const billing = new BillingService("BRL", "BRL", secret);
+    const { intent } = await billing.subscribe("starter", "monthly", "BR", "pix");
+    const raw = JSON.stringify({ intentId: intent.id, status: "paid" });
+    const updated = billing.handleWebhook(raw, hmacSign(raw, secret));
+    expect(updated.status).toBe("paid");
+    expect(billing.getIntent(intent.id)?.status).toBe("paid");
+  });
+
+  it("webhook: rejeita assinatura inválida (anti-fraude)", async () => {
+    const billing = new BillingService("BRL", "BRL", "wh-secret");
+    const { intent } = await billing.subscribe("starter", "monthly", "BR", "pix");
+    const raw = JSON.stringify({ intentId: intent.id, status: "paid" });
+    expect(() => billing.handleWebhook(raw, "assinatura-falsa")).toThrow();
+    expect(billing.getIntent(intent.id)?.status).not.toBe("paid");
+  });
+
+  it("rejeita cobrança com valor inválido", async () => {
+    const billing = new BillingService("BRL", "BRL");
+    await expect(
+      billing.checkout({ payin: Money.of(0, "BRL"), payoutCurrency: "BRL", method: "pix", description: "x" }),
+    ).rejects.toThrow();
   });
 });

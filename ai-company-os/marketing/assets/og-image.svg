@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Company OS — social share">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16203a"/>
+      <stop offset="0.55" stop-color="#0a0e17"/>
+    </linearGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b8cff"/>
+      <stop offset="1" stop-color="#7c5cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g transform="translate(90,110)">
+    <path d="M0,-30 L30,0 L0,30 L-30,0 Z" fill="url(#g)"/>
+    <path d="M0,-15 L15,0 L0,15 L-15,0 Z" fill="#0a0e17"/>
+  </g>
+  <text x="140" y="125" font-family="Inter, system-ui, sans-serif" font-size="46" font-weight="800" fill="#e6ebf5">Company<tspan fill="url(#g)"> OS</tspan></text>
+  <text x="90" y="300" font-family="Inter, system-ui, sans-serif" font-size="72" font-weight="800" fill="#e6ebf5">Fale com a sua empresa.</text>
+  <text x="90" y="380" font-family="Inter, system-ui, sans-serif" font-size="34" fill="#8a97b1">Uma tela. Agentes de IA que executam CRM, financeiro e mais.</text>
+  <text x="90" y="430" font-family="Inter, system-ui, sans-serif" font-size="34" fill="#8a97b1">Pagamentos globais · a partir de R$250/mês.</text>
+  <g transform="translate(90,500)">
+    <rect width="260" height="64" rx="12" fill="url(#g)"/>
+    <text x="130" y="41" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="700" fill="#ffffff">Testar grátis</text>
+  </g>
+  <text x="90" y="600" font-family="Inter, system-ui, sans-serif" font-size="22" fill="#5b8cff">companyos.ai</text>
+</svg>

@@ -10,7 +10,10 @@ import { BillingService } from "./billing/billing.service.js";
 import { AuthService } from "./modules/auth/auth.service.js";
 import { CrmModule } from "./modules/crm/crm.module.js";
 import { FinanceModule } from "./modules/finance/finance.module.js";
+import { FunnelModule } from "./modules/funnel/funnel.module.js";
+import { AuditLog } from "./platform/audit.js";
 import { EventBus } from "./platform/event-bus.js";
+import { RateLimiter } from "./platform/rate-limit.js";
 
 export interface Container {
   env: Env;
@@ -24,6 +27,9 @@ export interface Container {
   billing: BillingService;
   crm: CrmModule;
   finance: FinanceModule;
+  funnel: FunnelModule;
+  audit: AuditLog;
+  limiters: { auth: RateLimiter; chat: RateLimiter; api: RateLimiter };
 }
 
 /** Compõe o sistema inteiro. Ponto único de wiring — fácil de testar. */
@@ -33,12 +39,15 @@ export function buildContainer(env: Env = loadEnv()): Container {
   const tools = new ToolRegistry();
   const agents = new AgentRegistry();
   const llm = new LlmRouter(env);
+  const audit = new AuditLog();
 
   // Módulos de negócio registram suas ferramentas no Tool Registry.
   const crm = new CrmModule(events);
   const finance = new FinanceModule(events);
+  const funnel = new FunnelModule(events);
   crm.register(tools);
   finance.register(tools);
+  funnel.register(tools);
 
   // Conselho de Agentes exposto como ferramenta. Só usa o LLM quando há um
   // provedor real ativo; com o mock, gera a deliberação a partir das personas.
@@ -57,7 +66,13 @@ export function buildContainer(env: Env = loadEnv()): Container {
     },
   });
 
-  // Aprendizado proativo: reage a eventos de domínio (exemplo mínimo).
+  // Fronteira entre módulos via eventos: novo lead no funil vira cliente no CRM.
+  events.on("funnel.lead.created", (e) => {
+    const lead = e.payload as { name: string; contact: string };
+    crm.createCustomer({ tenantId: e.tenantId, userId: "system", role: "owner" }, lead.name, lead.contact);
+  });
+
+  // Aprendizado proativo: reage a eventos de domínio.
   events.on("finance.entry.recorded", (e) => {
     const entry = e.payload as { type: string; amount: number };
     if (entry.type === "expense" && entry.amount > 10000) {
@@ -66,11 +81,18 @@ export function buildContainer(env: Env = loadEnv()): Container {
   });
 
   const orchestrator = new Orchestrator(llm, tools, memory);
-  const auth = new AuthService(env.jwtSecret);
+  const auth = new AuthService(env.jwtSecret, audit);
   const billing = new BillingService(
     env.baseCurrency as Currency,
     env.payoutCurrency as Currency,
+    env.webhookSecret,
   );
 
-  return { env, events, memory, tools, agents, llm, orchestrator, auth, billing, crm, finance };
+  const limiters = {
+    auth: new RateLimiter(10, 60_000), // 10 tentativas de login por minuto/IP
+    chat: new RateLimiter(60, 60_000), // 60 mensagens por minuto/usuário
+    api: new RateLimiter(300, 60_000), // 300 req por minuto/IP (global)
+  };
+
+  return { env, events, memory, tools, agents, llm, orchestrator, auth, billing, crm, finance, funnel, audit, limiters };
 }

@@ -1,4 +1,6 @@
 import type { Currency } from "@aicos/shared";
+import { hmacVerify } from "../platform/crypto.js";
+import { AppError } from "../platform/errors.js";
 import { ExchangeRate, Money } from "./money.js";
 import {
   CryptoProvider,
@@ -53,11 +55,17 @@ export interface Quote {
 export class BillingService {
   private readonly providers: PaymentProvider[] = [new FiatOrchestrator(), new CryptoProvider()];
   private readonly fx = new ExchangeRate();
+  /** Guarda de idempotência: mesma chave → mesma cobrança (evita duplicidade). */
+  private readonly idempotency = new Map<string, PaymentIntent>();
+  /** Intenções emitidas, para conciliação via webhook. */
+  private readonly intents = new Map<string, PaymentIntent>();
 
   constructor(
     readonly baseCurrency: Currency = "BRL",
     /** Moeda em que o dono do sistema (merchant) quer receber. */
     private readonly defaultPayoutCurrency: Currency = "BRL",
+    /** Segredo para verificar assinaturas de webhook dos provedores. */
+    private readonly webhookSecret: string = "dev-webhook-secret",
   ) {}
 
   plans(): Plan[] {
@@ -126,20 +134,55 @@ export class BillingService {
     cycle: BillingCycle,
     country: string | undefined,
     method: PaymentMethod,
-    opts: { payoutCurrency?: Currency; payinCurrency?: Currency } = {},
+    opts: { payoutCurrency?: Currency; payinCurrency?: Currency; idempotencyKey?: string } = {},
   ): Promise<{ quote: Quote; intent: PaymentIntent }> {
     const quote = this.quote(planId, cycle, country, method, opts);
+    if (quote.payin.amount <= 0) throw new AppError("Valor de cobrança inválido.");
     const input: CreateIntentInput = {
       payin: Money.of(quote.payin.amount, quote.payin.currency),
       payoutCurrency: quote.payout.currency,
       method,
       description: `${quote.plan.name} (${cycle})`,
     };
-    const intent = await this.providerFor(method).createIntent(input);
+    const intent = await this.createIntentIdempotent(input, opts.idempotencyKey);
     return { quote, intent };
   }
 
-  async checkout(input: CreateIntentInput): Promise<PaymentIntent> {
-    return this.providerFor(input.method).createIntent(input);
+  async checkout(input: CreateIntentInput, idempotencyKey?: string): Promise<PaymentIntent> {
+    if (input.payin.amount <= 0) throw new AppError("Valor de cobrança inválido.");
+    return this.createIntentIdempotent(input, idempotencyKey);
+  }
+
+  private async createIntentIdempotent(input: CreateIntentInput, key?: string): Promise<PaymentIntent> {
+    if (key && this.idempotency.has(key)) return this.idempotency.get(key)!;
+    const intent = await this.providerFor(input.method).createIntent(input);
+    this.intents.set(intent.id, intent);
+    if (key) this.idempotency.set(key, intent);
+    return intent;
+  }
+
+  /**
+   * Recebe uma confirmação do provedor de pagamento. Verifica a ASSINATURA
+   * (HMAC) antes de confiar — impede que um atacante marque cobranças como
+   * pagas. Nunca armazenamos dados de cartão (PCI: os dados ficam no provedor).
+   */
+  handleWebhook(rawBody: string, signature: string): PaymentIntent {
+    if (!hmacVerify(rawBody, signature, this.webhookSecret)) {
+      throw new AppError("Assinatura de webhook inválida.", 401, "invalid_signature");
+    }
+    let event: { intentId?: string; status?: PaymentIntent["status"] };
+    try {
+      event = JSON.parse(rawBody);
+    } catch {
+      throw new AppError("Payload de webhook inválido.");
+    }
+    const intent = event.intentId ? this.intents.get(event.intentId) : undefined;
+    if (!intent) throw new AppError("Cobrança não encontrada.", 404, "intent_not_found");
+    if (event.status) intent.status = event.status;
+    return intent;
+  }
+
+  getIntent(id: string): PaymentIntent | undefined {
+    return this.intents.get(id);
   }
 }

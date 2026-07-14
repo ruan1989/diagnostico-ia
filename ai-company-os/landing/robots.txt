@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://companyos.ai/sitemap.xml

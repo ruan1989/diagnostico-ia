@@ -1,4 +1,4 @@
-# AI Company OS
+# Company OS
 
 > **O Sistema Operacional da Empresa, operado por conversa.**
 > Uma única tela. A IA controla CRM, Financeiro, Marketing, RH, Projetos e mais —
@@ -46,8 +46,14 @@ chamando ferramentas reais dos módulos. Cada empresa (tenant) tem seu próprio
 | Métodos: PIX, Boleto, Cartão, SEPA, ACH, FedNow, UPI, SPEI, OXXO, iDEAL, PayPal, Cripto | ✅ roteamento por país |
 | Planos a partir de **250/mês** (Trial/Starter/Business/Enterprise/White-Label) | ✅ funcional |
 | **Bilíngue PT/EN** (interface + IA) | ✅ funcional |
+| **Funil + chat de qualificação** (identifica necessidade → roteia para a área) | ✅ funcional |
+| **Segurança**: hash scrypt, AES-256-GCM, RBAC, rate limit, headers, auditoria | ✅ funcional |
+| **Pagamento seguro**: idempotência, webhook assinado (HMAC), zero dados de cartão | ✅ funcional |
 | Tela única conversacional (web) + landing SEO bilíngue | ✅ funcional |
 | Marketing, RH, Projetos, BI, Estoque, Documentos | 🧱 _scaffold_ / roadmap |
+
+**Marketing pronto para captar clientes:** kit de redes sociais (bios, posts, artes),
+SEO (sitemap/robots) e checklist em **[marketing/SOCIAL_KIT.md](./marketing/SOCIAL_KIT.md)**.
 
 **Go-to-market** (como levar isso a quem busca, sem spam): ver **[GO_TO_MARKET.md](./GO_TO_MARKET.md)**.
 Landing bilíngue pronta para SEO: **[`landing/index.html`](./landing/index.html)**.

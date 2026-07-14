@@ -48,7 +48,7 @@ export function App() {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand"><span className="logo">◆</span> AI Company OS</div>
+        <div className="brand"><span className="logo">◆</span> Company OS</div>
         <div className="topbar-right">
           <button className="ghost" onClick={() => setShowPricing(true)}>{t(lang, "pricing")}</button>
           <div className="lang">

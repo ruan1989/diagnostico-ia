@@ -11,6 +11,8 @@ export interface Env {
   baseCurrency: string;
   /** Moeda em que o dono do sistema quer receber (liquidação). */
   payoutCurrency: string;
+  /** Segredo para verificar assinaturas de webhook de pagamento. */
+  webhookSecret: string;
 }
 
 export function loadEnv(): Env {
@@ -28,5 +30,6 @@ export function loadEnv(): Env {
     billingProvider: process.env.BILLING_PROVIDER ?? "mock",
     baseCurrency: process.env.BASE_CURRENCY ?? "BRL",
     payoutCurrency: process.env.MERCHANT_PAYOUT_CURRENCY ?? "BRL",
+    webhookSecret: process.env.WEBHOOK_SECRET ?? process.env.JWT_SECRET ?? "dev-webhook-secret",
   };
 }
