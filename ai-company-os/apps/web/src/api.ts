@@ -10,6 +10,9 @@ export async function getInsights(lang: Lang): Promise<Insight[]> {
   return (await res.json()) as Insight[];
 }
 
+// Automação (tarefas geradas pela IA). No site estático, direto do motor.
+export { getTasks, setTaskDone, getAutomationsOn, setAutomationsOn, type Task } from "./engine/engine.js";
+
 // Se VITE_API_URL estiver definido, usa o backend real (HTTP). Caso contrário,
 // roda 100% no navegador (motor client-side) — é assim no GitHub Pages.
 const API = (import.meta.env.VITE_API_URL as string | undefined) || "";

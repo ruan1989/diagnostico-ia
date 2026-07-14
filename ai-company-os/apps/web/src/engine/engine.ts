@@ -16,29 +16,34 @@ interface Proposal { id: string; customerId: string; customerName: string; amoun
 interface Entry { id: string; type: "income" | "expense"; amount: number; currency: string; description: string; date: string }
 interface Lead { id: string; name: string; contact: string; need: string; area: string; stage: string; score: number; createdAt: string }
 
+export interface Task { id: string; title: string; due: string; source: string; done: boolean; key: string }
+
 interface State {
   customers: Customer[];
   proposals: Proposal[];
   entries: Entry[];
   leads: Lead[];
   memory: string[];
+  tasks: Task[];
+  automationsOn: boolean;
 }
 
 const KEY = "companyos_state_v1";
+const EMPTY: State = { customers: [], proposals: [], entries: [], leads: [], memory: [], tasks: [], automationsOn: true };
 
 function load(): State {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw) as State;
+    if (raw) return { ...EMPTY, ...(JSON.parse(raw) as Partial<State>) };
   } catch { /* ignore */ }
-  return { customers: [], proposals: [], entries: [], leads: [], memory: [] };
+  return { ...EMPTY };
 }
 
 let state: State = load();
 function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* ignore */ } }
 
 export function resetState() {
-  state = { customers: [], proposals: [], entries: [], leads: [], memory: [] };
+  state = { ...EMPTY };
   save();
 }
 
@@ -270,8 +275,52 @@ export function proactiveInsights(lang: Lang = "pt"): Insight[] {
   return out.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
 }
 
-// ── Planejador (interpreta linguagem natural → chamadas de ferramenta) ──────
+// ── Motor de Automação: a IA EXECUTA procedimentos sozinha ─────────────────
+function addTask(key: string, title: string, dueDays: number): boolean {
+  if (!state.automationsOn) return false;
+  if (state.tasks.some((t) => t.key === key)) return false;
+  state.tasks.push({ id: uid(), key, title, due: new Date(Date.now() + dueDays * 864e5).toISOString(), source: "automação", done: false });
+  return true;
+}
+/** Após qualquer ação, cria automaticamente as tarefas/follow-ups necessários. */
+export function runAutomations(): number {
+  if (!state.automationsOn) return 0;
+  let n = 0;
+  for (const p of state.proposals.filter((p) => p.status === "sent"))
+    if (addTask(`followup_${p.id}`, `Follow-up com ${p.customerName} — proposta de ${brl(p.amount)}`, 3)) n++;
+  const names = new Set(state.proposals.map((p) => p.customerName.toLowerCase()));
+  for (const l of state.leads.filter((l) => l.score >= 60 && !names.has(l.name.toLowerCase())))
+    if (addTask(`proposal_${l.id}`, `Enviar proposta para ${l.name} (lead quente, score ${l.score})`, 1)) n++;
+  const now = new Date();
+  const inMonth = (iso: string) => { const d = new Date(iso); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); };
+  const inc = state.entries.filter((e) => e.type === "income" && inMonth(e.date)).reduce((s, e) => s + e.amount, 0);
+  const exp = state.entries.filter((e) => e.type === "expense" && inMonth(e.date)).reduce((s, e) => s + e.amount, 0);
+  if (exp > inc && exp > 0) if (addTask("review_costs", "Revisar custos — caixa negativo este mês", 1)) n++;
+  if (n) save();
+  return n;
+}
+export function getTasks(): Task[] { return state.tasks.filter((t) => !t.done).sort((a, b) => a.due.localeCompare(b.due)); }
+export function setTaskDone(id: string) { const t = state.tasks.find((x) => x.id === id); if (t) { t.done = true; save(); } }
+export function getAutomationsOn(): boolean { return state.automationsOn; }
+export function setAutomationsOn(on: boolean) { state.automationsOn = on; save(); }
+
+// ── Planejador com comandos compostos ("faça A e B e C" numa frase só) ─────
 function plan(text: string): Array<{ name: string; input: Record<string, unknown> }> {
+  // Divide em orações por conectores (não por vírgula, que faz parte de 1 comando).
+  const clauses = text.split(/\s+(?:e|and|então|then|depois)\s+|;/i).map((s) => s.trim()).filter(Boolean);
+  const parts = clauses.length > 1 ? clauses : [text];
+  const calls: Array<{ name: string; input: Record<string, unknown> }> = [];
+  const seen = new Set<string>();
+  for (const part of parts) {
+    for (const c of planClause(part)) {
+      const k = c.name + JSON.stringify(c.input);
+      if (!seen.has(k)) { seen.add(k); calls.push(c); }
+    }
+  }
+  return calls.length ? calls : planClause(text);
+}
+
+function planClause(text: string): Array<{ name: string; input: Record<string, unknown> }> {
   const t = text.toLowerCase();
   if (/análise|analise|insight|o que (eu )?(devo|faço|fazer)|sugest|revis|diagnóstic|diagnostic|what should i|review|analy[sz]e/.test(t))
     return [{ name: "insights.review", input: {} }];
@@ -313,6 +362,12 @@ export function engineChat(message: string, lang: Lang): ChatResponse {
   } else {
     const head = lang === "en" ? "Done. Here's what I did:" : "Pronto. Aqui está o que fiz:";
     reply = `${head}\n${steps.map((s) => `• ${s.summary}`).join("\n")}`;
+    // Automação: a IA executa procedimentos (cria follow-ups/tarefas) sozinha.
+    const autoCreated = runAutomations();
+    if (autoCreated > 0)
+      reply += lang === "en"
+        ? `\n\n⚙️ Automation: created ${autoCreated} task(s) for you.`
+        : `\n\n⚙️ Automação: criei ${autoCreated} tarefa(s) automática(s) para você.`;
     // Proatividade: após agir, antecipa o próximo passo mais urgente.
     const didReview = calls.some((c) => c.name === "insights.review");
     if (!didReview) {

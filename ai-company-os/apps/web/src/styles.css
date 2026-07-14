@@ -164,3 +164,13 @@ body {
 .insight-run { margin-top: 9px; background: transparent; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
 .insight-run:hover { background: rgba(91,140,255,.12); }
 .insight-run em { color: var(--text); font-style: normal; }
+
+.tasks-head { display: flex; align-items: center; justify-content: space-between; margin-top: 22px; }
+.tasks-head h3 { margin: 0; font-size: 16px; }
+.auto-toggle { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.small { font-size: 12px; }
+.tasks { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.task { display: flex; gap: 10px; align-items: flex-start; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.task input { margin-top: 3px; }
+.task-title { font-size: 14px; }
+.task-due { font-size: 12px; color: var(--muted); margin-top: 2px; }

@@ -29,6 +29,9 @@ const PT: Dict = {
   insights: "Insights",
   insightsSub: "A IA analisa sua empresa e antecipa o que precisa de atenção.",
   resolve: "Resolver",
+  tasks: "Tarefas automáticas",
+  automations: "Automações ligadas",
+  noTasks: "Nenhuma tarefa pendente. Aja no chat e a IA cria os follow-ups.",
 };
 
 const EN: Dict = {
@@ -58,6 +61,9 @@ const EN: Dict = {
   insights: "Insights",
   insightsSub: "The AI analyzes your company and flags what needs attention.",
   resolve: "Resolve",
+  tasks: "Automatic tasks",
+  automations: "Automations on",
+  noTasks: "No pending tasks. Act in the chat and the AI creates the follow-ups.",
 };
 
 const SUGGESTIONS: Record<Lang, string[]> = {

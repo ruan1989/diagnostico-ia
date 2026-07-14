@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatResponse, ExecutedStep, Lang } from "@aicos/shared";
-import { getInsights, getOptions, getPlans, getQuote, health, sendChat, type Insight, type Plan, type Quote } from "./api.js";
+import {
+  getAutomationsOn, getInsights, getOptions, getPlans, getQuote, getTasks, health, sendChat,
+  setAutomationsOn, setTaskDone, type Insight, type Plan, type Quote, type Task,
+} from "./api.js";
 import { suggestions, t } from "./i18n.js";
 
 interface Turn {
@@ -18,10 +21,11 @@ export function App() {
   const [status, setStatus] = useState("");
   const [showPricing, setShowPricing] = useState(false);
   const [insights, setInsights] = useState<Insight[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [showInsights, setShowInsights] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  const refreshInsights = () => { getInsights(lang).then(setInsights).catch(() => {}); };
+  const refreshInsights = () => { getInsights(lang).then(setInsights).catch(() => {}); setTasks(getTasks()); };
 
   useEffect(() => {
     health()
@@ -30,7 +34,7 @@ export function App() {
     refreshInsights();
   }, [lang]);
 
-  const alertCount = insights.filter((i) => i.severity === "critical" || i.severity === "warn").length;
+  const alertCount = insights.filter((i) => i.severity === "critical" || i.severity === "warn").length + tasks.length;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -136,16 +140,24 @@ export function App() {
         <InsightsPanel
           lang={lang}
           insights={insights}
+          tasks={tasks}
           onClose={() => setShowInsights(false)}
           onRun={(cmd) => { setShowInsights(false); submit(cmd); }}
+          onRefresh={refreshInsights}
         />
       )}
     </div>
   );
 }
 
-function InsightsPanel({ lang, insights, onClose, onRun }: { lang: Lang; insights: Insight[]; onClose: () => void; onRun: (cmd: string) => void }) {
+function InsightsPanel({ lang, insights, tasks, onClose, onRun, onRefresh }: {
+  lang: Lang; insights: Insight[]; tasks: Task[]; onClose: () => void; onRun: (cmd: string) => void; onRefresh: () => void;
+}) {
+  const [autoOn, setAutoOn] = useState(getAutomationsOn());
   const icon: Record<string, string> = { critical: "🔴", warn: "🟡", info: "🔵", success: "🟢" };
+  const toggleAuto = () => { const v = !autoOn; setAutomationsOn(v); setAutoOn(v); onRefresh(); };
+  const complete = (id: string) => { setTaskDone(id); onRefresh(); };
+  const dueLabel = (iso: string) => new Date(iso).toLocaleDateString(lang === "en" ? "en-US" : "pt-BR");
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -164,6 +176,25 @@ function InsightsPanel({ lang, insights, onClose, onRun }: { lang: Lang; insight
                   ▶ {t(lang, "resolve")}: <em>{i.suggestion}</em>
                 </button>
               )}
+            </div>
+          ))}
+        </div>
+
+        <div className="tasks-head">
+          <h3>⚙️ {t(lang, "tasks")}</h3>
+          <label className="auto-toggle">
+            <input type="checkbox" checked={autoOn} onChange={toggleAuto} /> {t(lang, "automations")}
+          </label>
+        </div>
+        {tasks.length === 0 && <p className="muted small">{t(lang, "noTasks")}</p>}
+        <div className="tasks">
+          {tasks.map((tk) => (
+            <div key={tk.id} className="task">
+              <input type="checkbox" onChange={() => complete(tk.id)} />
+              <div className="task-body">
+                <div className="task-title">{tk.title}</div>
+                <div className="task-due">📅 {dueLabel(tk.due)} · {tk.source}</div>
+              </div>
             </div>
           ))}
         </div>
