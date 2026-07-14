@@ -43,6 +43,32 @@ entrega valor de uso diário e aumenta o custo de troca (retenção).
 - Fase 3: receita por automação, CAC/LTV
 - Fase 4: GMV do marketplace, nº de módulos de terceiros
 
+## 🧠 Camada de Inteligência — "pensar à frente do cliente"
+
+Já implementado (Fase 0): **Inteligência Proativa** — o sistema analisa o estado da
+empresa e antecipa riscos/ações sem ser perguntado (caixa negativo, leads quentes
+sem proposta, propostas sem follow-up, projeção do mês), sugere o comando e a IA
+alerta sozinha após cada ação. Ver `core/proactive` (API) e `engine` (web).
+
+Próximas tecnologias para torná-lo verdadeiramente inteligente:
+
+1. **LLM real + RAG** — trocar o mock por Claude/GPT com _function calling_ e uma
+   base de conhecimento vetorial (pgvector/Qdrant) treinada com os documentos da
+   empresa (PDF, e-mail, WhatsApp), para respostas com contexto real.
+2. **Previsão (ML)** — modelos de séries temporais para prever vendas, fluxo de
+   caixa, churn e reposição de estoque (hoje há projeção linear simples).
+3. **Automações proativas** — quando um insight surge, o sistema **executa** a ação
+   aprovada (ex.: dispara follow-up no WhatsApp) via construtor visual estilo n8n.
+4. **Agentes autônomos com objetivos** — cada agente monitora sua área 24/7 e age
+   dentro de limites definidos (orçamento, alçada), reportando ao "conselho".
+5. **Memória semântica de longo prazo** — aprende padrões da empresa e melhora as
+   sugestões com o tempo (a interface `MemoryStore` já prevê a camada vetorial).
+6. **Integrações** — WhatsApp, e-mail, bancos (Open Finance), notas fiscais, Google
+   Ads/Meta, para o sistema ter dados reais e agir no mundo.
+7. **Voz** — comando e resposta por voz (STT/TTS) na tela única.
+
+Ver também `SECURITY.md` para o que blindar antes de dados reais.
+
 ## Planos comerciais
 | Plano | Foco |
 |-------|------|

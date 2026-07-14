@@ -107,8 +107,13 @@ function scoreLead(t: string): number {
   return Math.min(100, n);
 }
 
-function tool(name: string, input: Record<string, unknown>): ToolResult {
+function tool(name: string, input: Record<string, unknown>, lang: Lang = "pt"): ToolResult {
   switch (name) {
+    case "insights.review": {
+      const list = proactiveInsights(lang);
+      const top = list.slice(0, 3).map((i) => `• ${i.title}: ${i.message}`).join("\n");
+      return { ok: true, summary: (lang === "en" ? "Proactive review:\n" : "Análise proativa:\n") + top, data: { kind: "insights", title: lang === "en" ? "Proactive Intelligence" : "Inteligência Proativa", payload: list } };
+    }
     case "crm.create_customer": {
       const c = createCustomer(String(input.name ?? "Novo Cliente"), String(input.email ?? ""));
       return { ok: true, summary: `Cliente "${c.name}" cadastrado no CRM${c.email ? ` (${c.email})` : ""}.`, data: { kind: "customer", title: "Cliente cadastrado", payload: c } };
@@ -172,9 +177,104 @@ function tool(name: string, input: Record<string, unknown>): ToolResult {
   }
 }
 
+// ── Inteligência Proativa: pensa à frente do cliente ───────────────────────
+export interface Insight {
+  id: string;
+  severity: "critical" | "warn" | "info" | "success";
+  title: string;
+  message: string;
+  suggestion?: string; // comando pronto para o usuário executar por 1 toque
+}
+
+const SEV_ORDER: Record<Insight["severity"], number> = { critical: 0, warn: 1, info: 2, success: 3 };
+const brl = (n: number) => `R$ ${n.toLocaleString("pt-BR")}`;
+
+export function proactiveInsights(lang: Lang = "pt"): Insight[] {
+  const en = lang === "en";
+  const out: Insight[] = [];
+  const now = new Date();
+  const inMonth = (iso: string) => { const d = new Date(iso); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); };
+  const income = state.entries.filter((e) => e.type === "income" && inMonth(e.date)).reduce((s, e) => s + e.amount, 0);
+  const expense = state.entries.filter((e) => e.type === "expense" && inMonth(e.date)).reduce((s, e) => s + e.amount, 0);
+
+  // 1. Caixa negativo (crítico)
+  if (expense > income && expense > 0) {
+    out.push({ id: "cash_negative", severity: "critical",
+      title: en ? "Expenses above revenue" : "Despesas acima da receita",
+      message: en ? `This month expenses (${brl(expense)}) exceed revenue (${brl(income)}). Review costs.` : `Neste mês as despesas (${brl(expense)}) superam a receita (${brl(income)}). Reveja os custos.`,
+      suggestion: en ? "show cash flow" : "qual meu fluxo de caixa?" });
+  }
+
+  // 2. Leads quentes sem proposta
+  const proposalNames = new Set(state.proposals.map((p) => p.customerName.toLowerCase()));
+  const hotNoProposal = state.leads.filter((l) => l.score >= 60 && !proposalNames.has(l.name.toLowerCase()));
+  if (hotNoProposal.length) {
+    const lead = hotNoProposal[0];
+    out.push({ id: "hot_lead_no_proposal", severity: "warn",
+      title: en ? `${hotNoProposal.length} hot lead(s) without a proposal` : `${hotNoProposal.length} lead(s) quente(s) sem proposta`,
+      message: en ? `"${lead.name}" (score ${lead.score}) is qualified but has no proposal. Send one before it cools down.` : `"${lead.name}" (score ${lead.score}) está qualificado mas sem proposta. Envie uma antes de esfriar.`,
+      suggestion: en ? `create a proposal of 2000 for ${lead.name}` : `crie uma proposta de 2000 para ${lead.name}` });
+  }
+
+  // 3. Propostas aguardando follow-up
+  const pending = state.proposals.filter((p) => p.status === "sent");
+  if (pending.length) {
+    out.push({ id: "proposals_pending", severity: "warn",
+      title: en ? `${pending.length} proposal(s) awaiting a reply` : `${pending.length} proposta(s) aguardando resposta`,
+      message: en ? `Total ${brl(pending.reduce((s, p) => s + p.amount, 0))} in the pipeline. Follow up to close.` : `Total de ${brl(pending.reduce((s, p) => s + p.amount, 0))} no funil. Faça follow-up para fechar.`,
+      suggestion: en ? "list customers" : "liste meus clientes" });
+  }
+
+  // 4. Clientes sem receita registrada
+  if (state.customers.length > 0 && income === 0) {
+    out.push({ id: "customers_no_revenue", severity: "info",
+      title: en ? "Customers but no revenue yet" : "Clientes, mas sem receita ainda",
+      message: en ? "You have customers but no income recorded this month. Record your sales to track profit." : "Você tem clientes mas nenhuma receita lançada no mês. Registre suas vendas para acompanhar o lucro.",
+      suggestion: en ? "record income of 3000 from a sale" : "lance uma receita de 3000 de uma venda" });
+  }
+
+  // 5. Cadastros incompletos (sem email → bloqueia automações)
+  const noEmail = state.customers.filter((c) => !c.email);
+  if (noEmail.length) {
+    out.push({ id: "customers_no_email", severity: "info",
+      title: en ? `${noEmail.length} customer(s) without email` : `${noEmail.length} cliente(s) sem email`,
+      message: en ? "Complete their contact info to enable follow-up automations." : "Complete o contato para habilitar automações de follow-up." });
+  }
+
+  // 6. Projeção de fechamento do mês (pensa à frente)
+  if (income > 0) {
+    const day = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const projected = Math.round((income / day) * daysInMonth);
+    out.push({ id: "forecast", severity: "info",
+      title: en ? "Month-end revenue forecast" : "Projeção de receita do mês",
+      message: en ? `At the current pace, you should close the month around ${brl(projected)}.` : `No ritmo atual, você deve fechar o mês em torno de ${brl(projected)}.` });
+  }
+
+  // 7. Concentração de receita (risco) — via propostas
+  if (state.proposals.length >= 2) {
+    const total = state.proposals.reduce((s, p) => s + p.amount, 0);
+    const top = Math.max(...state.proposals.map((p) => p.amount));
+    if (total > 0 && top / total > 0.6) {
+      out.push({ id: "revenue_concentration", severity: "warn",
+        title: en ? "Revenue concentration risk" : "Risco de concentração de receita",
+        message: en ? "One deal represents most of your pipeline. Diversify to reduce risk." : "Uma única proposta representa a maior parte do funil. Diversifique para reduzir risco." });
+    }
+  }
+
+  if (out.length === 0) {
+    out.push({ id: "all_good", severity: "success",
+      title: en ? "All under control" : "Tudo sob controle",
+      message: en ? "No risks detected. Start by registering a customer or recording a sale." : "Nenhum risco detectado. Comece cadastrando um cliente ou lançando uma venda." });
+  }
+  return out.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
+}
+
 // ── Planejador (interpreta linguagem natural → chamadas de ferramenta) ──────
 function plan(text: string): Array<{ name: string; input: Record<string, unknown> }> {
   const t = text.toLowerCase();
+  if (/análise|analise|insight|o que (eu )?(devo|faço|fazer)|sugest|revis|diagnóstic|diagnostic|what should i|review|analy[sz]e/.test(t))
+    return [{ name: "insights.review", input: {} }];
   if (/\bconselho\b|delibere|debata|\bcouncil\b|deliberate/.test(t))
     return [{ name: "council.deliberate", input: { topic: text.replace(/.*(conselho|council)[:,]?\s*/i, "").trim() || text } }];
   if (/qualifi|lead|prospect/.test(t))
@@ -200,7 +300,7 @@ export function engineChat(message: string, lang: Lang): ChatResponse {
   const steps: ExecutedStep[] = [];
   const data: ChatResponse["data"] = [];
   for (const call of calls) {
-    const res = tool(call.name, call.input);
+    const res = tool(call.name, call.input, lang);
     steps.push({ agent: agentFor(call.name), tool: call.name, input: call.input, ok: res.ok, summary: res.summary });
     if (res.data) data.push(res.data);
     if (res.ok) { state.memory.push(res.summary); save(); }
@@ -208,11 +308,17 @@ export function engineChat(message: string, lang: Lang): ChatResponse {
   let reply: string;
   if (steps.length === 0) {
     reply = lang === "en"
-      ? "Got it. I can register customers, create proposals, record income/expenses, show your profit and cash flow, qualify leads, or convene the agent council. What would you like?"
-      : "Entendi. Posso cadastrar clientes, criar propostas, lançar receitas/despesas, mostrar lucro e fluxo de caixa, qualificar leads ou reunir o conselho de agentes. O que deseja?";
+      ? "Got it. I can register customers, create proposals, record income/expenses, show profit and cash flow, qualify leads, convene the agent council, or run a proactive review (ask \"what should I do?\"). What would you like?"
+      : "Entendi. Posso cadastrar clientes, criar propostas, lançar receitas/despesas, mostrar lucro e fluxo de caixa, qualificar leads, reunir o conselho ou fazer uma análise proativa (pergunte \"o que devo fazer?\"). O que deseja?";
   } else {
     const head = lang === "en" ? "Done. Here's what I did:" : "Pronto. Aqui está o que fiz:";
     reply = `${head}\n${steps.map((s) => `• ${s.summary}`).join("\n")}`;
+    // Proatividade: após agir, antecipa o próximo passo mais urgente.
+    const didReview = calls.some((c) => c.name === "insights.review");
+    if (!didReview) {
+      const urgent = proactiveInsights(lang).find((i) => i.severity === "critical" || i.severity === "warn");
+      if (urgent) reply += (lang === "en" ? `\n\n💡 Heads-up: ${urgent.title}. ${urgent.message}` : `\n\n💡 Atenção: ${urgent.title}. ${urgent.message}`);
+    }
   }
   return { reply, steps, data };
 }

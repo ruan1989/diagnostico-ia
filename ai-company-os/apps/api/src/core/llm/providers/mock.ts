@@ -49,6 +49,11 @@ export class MockLlmProvider implements LlmProvider {
     const calls: LlmToolCall[] = [];
     const has = (name: string) => available.has(name);
 
+    // Inteligência proativa (PT/EN)
+    if (/análise|analise|insight|o que (eu )?(devo|faço|fazer)|sugest|revis|diagnóstic|diagnostic|what should i|review|analy[sz]e/.test(t) && has("insights.review")) {
+      return [{ name: "insights.review", input: {} }];
+    }
+
     // Conselho de agentes (PT/EN)
     if (/\bconselho\b|delibere|debata|reúna os agentes|\bcouncil\b|deliberate/.test(t) && has("council.deliberate")) {
       const topic = text.replace(/.*(conselho|council)[:,]?\s*/i, "").trim() || text;

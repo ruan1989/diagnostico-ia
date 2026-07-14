@@ -53,6 +53,13 @@ export function registerRoutes(app: FastifyInstance, c: Container): void {
 
   app.get("/agents", async () => c.agents.list());
 
+  // Inteligência Proativa: insights antecipados sobre a empresa.
+  app.get("/insights", async (req) => {
+    const ctx = c.auth.resolve(bearer(req.headers.authorization));
+    const { lang } = (req.query ?? {}) as { lang?: Lang };
+    return c.proactive.review(ctx, lang === "en" ? "en" : "pt");
+  });
+
   // ── Funil de aquisição (captura de lead pública, pré-login) ───────
   app.post("/funnel/intake", async (req) => {
     const ip = clientIp(req);

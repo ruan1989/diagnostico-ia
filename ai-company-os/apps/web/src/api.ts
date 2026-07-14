@@ -1,6 +1,14 @@
 import type { ChatResponse, Currency, Lang } from "@aicos/shared";
-import { engineChat, engineHealth } from "./engine/engine.js";
+import { engineChat, engineHealth, proactiveInsights, type Insight } from "./engine/engine.js";
 import { engineOptions, enginePlans, engineQuote } from "./engine/billing.js";
+
+export type { Insight };
+/** Inteligência Proativa: insights/antecipações (client-side por padrão). */
+export async function getInsights(lang: Lang): Promise<Insight[]> {
+  if (!useBackend) return proactiveInsights(lang);
+  const res = await fetch(`${API}/insights?lang=${lang}`);
+  return (await res.json()) as Insight[];
+}
 
 // Se VITE_API_URL estiver definido, usa o backend real (HTTP). Caso contrário,
 // roda 100% no navegador (motor client-side) — é assim no GitHub Pages.

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatResponse, ExecutedStep, Lang } from "@aicos/shared";
-import { getOptions, getPlans, getQuote, health, sendChat, type Plan, type Quote } from "./api.js";
+import { getInsights, getOptions, getPlans, getQuote, health, sendChat, type Insight, type Plan, type Quote } from "./api.js";
 import { suggestions, t } from "./i18n.js";
 
 interface Turn {
@@ -17,13 +17,20 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [showPricing, setShowPricing] = useState(false);
+  const [insights, setInsights] = useState<Insight[]>([]);
+  const [showInsights, setShowInsights] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+
+  const refreshInsights = () => { getInsights(lang).then(setInsights).catch(() => {}); };
 
   useEffect(() => {
     health()
       .then((h) => setStatus(`${t(lang, "online")} · IA: ${h.llm} · ${h.tools} ${t(lang, "tools")}`))
       .catch(() => setStatus(t(lang, "offline")));
+    refreshInsights();
   }, [lang]);
+
+  const alertCount = insights.filter((i) => i.severity === "critical" || i.severity === "warn").length;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -42,6 +49,7 @@ export function App() {
       setTurns((prev) => [...prev, { role: "assistant", text: `⚠️ ${(err as Error).message}` }]);
     } finally {
       setBusy(false);
+      refreshInsights();
     }
   }
 
@@ -50,6 +58,9 @@ export function App() {
       <header className="topbar">
         <div className="brand"><span className="logo">◆</span> Company OS</div>
         <div className="topbar-right">
+          <button className="ghost insights-btn" onClick={() => setShowInsights(true)}>
+            💡 {t(lang, "insights")}{alertCount > 0 && <span className="badge">{alertCount}</span>}
+          </button>
           <button className="ghost" onClick={() => setShowPricing(true)}>{t(lang, "pricing")}</button>
           <div className="lang">
             <button className={lang === "pt" ? "on" : ""} onClick={() => setLang("pt")}>PT</button>
@@ -121,6 +132,42 @@ export function App() {
       </footer>
 
       {showPricing && <Pricing lang={lang} onClose={() => setShowPricing(false)} />}
+      {showInsights && (
+        <InsightsPanel
+          lang={lang}
+          insights={insights}
+          onClose={() => setShowInsights(false)}
+          onRun={(cmd) => { setShowInsights(false); submit(cmd); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function InsightsPanel({ lang, insights, onClose, onRun }: { lang: Lang; insights: Insight[]; onClose: () => void; onRun: (cmd: string) => void }) {
+  const icon: Record<string, string> = { critical: "🔴", warn: "🟡", info: "🔵", success: "🟢" };
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>💡 {t(lang, "insights")}</h2>
+          <button className="ghost" onClick={onClose}>{t(lang, "close")}</button>
+        </div>
+        <p className="muted">{t(lang, "insightsSub")}</p>
+        <div className="insights">
+          {insights.map((i) => (
+            <div key={i.id} className={`insight sev-${i.severity}`}>
+              <div className="insight-title">{icon[i.severity]} {i.title}</div>
+              <div className="insight-msg">{i.message}</div>
+              {i.suggestion && (
+                <button className="insight-run" onClick={() => onRun(i.suggestion!)}>
+                  ▶ {t(lang, "resolve")}: <em>{i.suggestion}</em>
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -213,7 +260,17 @@ function DataCard({ kind, title, payload }: { kind: string; title: string; paylo
       <div className="card-title">{title}</div>
       {kind === "kpi" && <KpiView payload={payload as Record<string, number>} />}
       {kind === "deliberation" && <Deliberation payload={payload as DeliberationPayload} />}
-      {(kind === "table" || kind === "customer" || kind === "proposal" || kind === "entry") && (
+      {kind === "insights" && (
+        <div className="insights">
+          {(payload as Insight[]).map((i) => (
+            <div key={i.id} className={`insight sev-${i.severity}`}>
+              <div className="insight-title">{{ critical: "🔴", warn: "🟡", info: "🔵", success: "🟢" }[i.severity]} {i.title}</div>
+              <div className="insight-msg">{i.message}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {(kind === "table" || kind === "customer" || kind === "proposal" || kind === "entry" || kind === "lead" || kind === "pipeline") && (
         <pre className="json">{JSON.stringify(payload, null, 2)}</pre>
       )}
     </div>

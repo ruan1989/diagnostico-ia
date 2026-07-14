@@ -26,6 +26,9 @@ const PT: Dict = {
   f3t: "🌍 Pagamentos globais", f3d: "PIX, cartão, cripto. Receba na sua moeda.",
   f4t: "🔒 Seguro", f4d: "Seus dados ficam no seu dispositivo.",
   demoNote: "Demonstração funcional — os dados ficam salvos só no seu navegador.",
+  insights: "Insights",
+  insightsSub: "A IA analisa sua empresa e antecipa o que precisa de atenção.",
+  resolve: "Resolver",
 };
 
 const EN: Dict = {
@@ -52,6 +55,9 @@ const EN: Dict = {
   f3t: "🌍 Global payments", f3d: "PIX, card, crypto. Get paid in your currency.",
   f4t: "🔒 Secure", f4d: "Your data stays on your device.",
   demoNote: "Functional demo — data is saved only in your browser.",
+  insights: "Insights",
+  insightsSub: "The AI analyzes your company and flags what needs attention.",
+  resolve: "Resolve",
 };
 
 const SUGGESTIONS: Record<Lang, string[]> = {

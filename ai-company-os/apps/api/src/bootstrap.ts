@@ -3,6 +3,7 @@ import { loadEnv, type Env } from "./config/env.js";
 import { Council } from "./core/agents/council.js";
 import { AgentRegistry } from "./core/agents/registry.js";
 import { Orchestrator } from "./core/ai-core/orchestrator.js";
+import { ProactiveEngine } from "./core/proactive/proactive.js";
 import { LlmRouter } from "./core/llm/router.js";
 import { MemoryStore } from "./core/memory/memory.js";
 import { ToolRegistry } from "./core/tools/registry.js";
@@ -28,6 +29,7 @@ export interface Container {
   crm: CrmModule;
   finance: FinanceModule;
   funnel: FunnelModule;
+  proactive: ProactiveEngine;
   audit: AuditLog;
   limiters: { auth: RateLimiter; chat: RateLimiter; api: RateLimiter };
 }
@@ -48,6 +50,22 @@ export function buildContainer(env: Env = loadEnv()): Container {
   crm.register(tools);
   finance.register(tools);
   funnel.register(tools);
+
+  // Inteligência Proativa: analisa e antecipa (exposta como ferramenta da IA).
+  const proactive = new ProactiveEngine(crm, finance, funnel);
+  tools.register({
+    name: "insights.review",
+    description: "Faz uma análise proativa da empresa e antecipa o que precisa de atenção.",
+    params: {},
+    handler: (ctx) => {
+      const list = proactive.review(ctx, "pt");
+      return {
+        ok: true,
+        summary: `Análise proativa: ${list.slice(0, 3).map((i) => i.title).join("; ")}.`,
+        data: { kind: "insights", title: "Inteligência Proativa", payload: list },
+      };
+    },
+  });
 
   // Conselho de Agentes exposto como ferramenta. Só usa o LLM quando há um
   // provedor real ativo; com o mock, gera a deliberação a partir das personas.
@@ -94,5 +112,5 @@ export function buildContainer(env: Env = loadEnv()): Container {
     api: new RateLimiter(300, 60_000), // 300 req por minuto/IP (global)
   };
 
-  return { env, events, memory, tools, agents, llm, orchestrator, auth, billing, crm, finance, funnel, audit, limiters };
+  return { env, events, memory, tools, agents, llm, orchestrator, auth, billing, crm, finance, funnel, proactive, audit, limiters };
 }

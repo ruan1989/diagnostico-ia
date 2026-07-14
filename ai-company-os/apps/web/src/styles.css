@@ -150,3 +150,17 @@ body {
 .q-label { font-size: 12px; color: var(--muted); }
 .q-val { font-size: 22px; font-weight: 700; margin-top: 4px; }
 .q-arrow { font-size: 24px; color: var(--accent); }
+
+.insights-btn { position: relative; }
+.badge { background: var(--fail); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 6px; margin-left: 6px; font-weight: 700; }
+.insights { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.insight { background: var(--panel-2); border: 1px solid var(--border); border-left-width: 3px; border-radius: 10px; padding: 12px 14px; }
+.insight.sev-critical { border-left-color: var(--fail); }
+.insight.sev-warn { border-left-color: #e0a83e; }
+.insight.sev-info { border-left-color: var(--accent); }
+.insight.sev-success { border-left-color: var(--ok); }
+.insight-title { font-weight: 700; font-size: 14px; }
+.insight-msg { color: var(--muted); font-size: 13px; margin-top: 3px; }
+.insight-run { margin-top: 9px; background: transparent; border: 1px solid var(--accent); color: var(--accent); border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
+.insight-run:hover { background: rgba(91,140,255,.12); }
+.insight-run em { color: var(--text); font-style: normal; }
