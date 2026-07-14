@@ -41,9 +41,16 @@ chamando ferramentas reais dos módulos. Cada empresa (tenant) tem seu próprio
 | Módulo CRM (clientes, leads, propostas) | ✅ funcional |
 | Módulo Financeiro (lançamentos, fluxo de caixa, lucro) | ✅ funcional |
 | Auth multi-tenant + RBAC | ✅ funcional |
-| Billing multi-moeda (BRL/USD/cripto) + provedores | ✅ arquitetura + provedores mock |
-| Tela única conversacional (web) | ✅ funcional |
+| **Pagamentos globais** — comprador paga na moeda local, você recebe na sua | ✅ funcional (mock) |
+| Multi-moeda (BRL/USD/EUR/GBP/JPY/INR/MXN/ARS/NGN/ZAR + BTC/ETH/USDT/USDC) | ✅ funcional |
+| Métodos: PIX, Boleto, Cartão, SEPA, ACH, FedNow, UPI, SPEI, OXXO, iDEAL, PayPal, Cripto | ✅ roteamento por país |
+| Planos a partir de **250/mês** (Trial/Starter/Business/Enterprise/White-Label) | ✅ funcional |
+| **Bilíngue PT/EN** (interface + IA) | ✅ funcional |
+| Tela única conversacional (web) + landing SEO bilíngue | ✅ funcional |
 | Marketing, RH, Projetos, BI, Estoque, Documentos | 🧱 _scaffold_ / roadmap |
+
+**Go-to-market** (como levar isso a quem busca, sem spam): ver **[GO_TO_MARKET.md](./GO_TO_MARKET.md)**.
+Landing bilíngue pronta para SEO: **[`landing/index.html`](./landing/index.html)**.
 
 Veja **[ARCHITECTURE.md](./ARCHITECTURE.md)** para o desenho completo (microserviços-ready)
 e **[ROADMAP.md](./ROADMAP.md)** para a estratégia de expansão por módulos.

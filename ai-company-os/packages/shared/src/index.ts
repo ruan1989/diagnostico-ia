@@ -31,10 +31,15 @@ export interface ChatResponse {
   data: Array<{ kind: string; title: string; payload: unknown }>;
 }
 
-/** Moedas suportadas (fiat + cripto). */
-export type Currency = "BRL" | "USD" | "EUR" | "BTC" | "ETH" | "USDT";
+/** Moedas suportadas (fiat + cripto/stablecoin). Adaptável ao mundo todo. */
+export type Currency =
+  | "BRL" | "USD" | "EUR" | "GBP" | "JPY" | "INR" | "MXN" | "ARS" | "NGN" | "ZAR"
+  | "BTC" | "ETH" | "USDT" | "USDC";
 
 export interface MoneyDTO {
   amount: number; // em unidade principal (ex.: reais, não centavos)
   currency: Currency;
 }
+
+/** Idiomas da interface e da IA. */
+export type Lang = "pt" | "en";

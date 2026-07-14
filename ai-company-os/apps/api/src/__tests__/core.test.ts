@@ -54,6 +54,14 @@ describe("AI Core — ciclo conversacional (provedor mock)", () => {
     expect(c.crm.customers.list("A")[0].name).not.toBe(c.crm.customers.list("B")[0].name);
   });
 
+  it("entende comandos em inglês (bilíngue)", async () => {
+    const c = buildContainer();
+    const res = await c.orchestrator.handle(owner, "register the customer John Global, email john@world.com", "en");
+    expect(res.steps.some((s) => s.tool === "crm.create_customer" && s.ok)).toBe(true);
+    expect(res.reply.startsWith("Done")).toBe(true);
+    expect(c.crm.customers.list("t1").some((cust) => cust.name === "John Global")).toBe(true);
+  });
+
   it("reúne o conselho de agentes e decide", async () => {
     const c = buildContainer();
     const res = await c.orchestrator.handle(owner, "chame o conselho: devo contratar um vendedor?");

@@ -1,3 +1,4 @@
+import type { Currency } from "@aicos/shared";
 import { loadEnv, type Env } from "./config/env.js";
 import { Council } from "./core/agents/council.js";
 import { AgentRegistry } from "./core/agents/registry.js";
@@ -66,7 +67,10 @@ export function buildContainer(env: Env = loadEnv()): Container {
 
   const orchestrator = new Orchestrator(llm, tools, memory);
   const auth = new AuthService(env.jwtSecret);
-  const billing = new BillingService();
+  const billing = new BillingService(
+    env.baseCurrency as Currency,
+    env.payoutCurrency as Currency,
+  );
 
   return { env, events, memory, tools, agents, llm, orchestrator, auth, billing, crm, finance };
 }

@@ -7,6 +7,10 @@ export interface Env {
   openaiModel: string;
   jwtSecret: string;
   billingProvider: string;
+  /** Moeda-base dos preços dos planos. */
+  baseCurrency: string;
+  /** Moeda em que o dono do sistema quer receber (liquidação). */
+  payoutCurrency: string;
 }
 
 export function loadEnv(): Env {
@@ -22,5 +26,7 @@ export function loadEnv(): Env {
     openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o",
     jwtSecret: process.env.JWT_SECRET ?? "dev-secret",
     billingProvider: process.env.BILLING_PROVIDER ?? "mock",
+    baseCurrency: process.env.BASE_CURRENCY ?? "BRL",
+    payoutCurrency: process.env.MERCHANT_PAYOUT_CURRENCY ?? "BRL",
   };
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatResponse, ExecutedStep } from "@aicos/shared";
-import { health, sendChat } from "./api.js";
+import type { ChatResponse, ExecutedStep, Lang } from "@aicos/shared";
+import { getOptions, getPlans, getQuote, health, sendChat, type Plan, type Quote } from "./api.js";
+import { suggestions, t } from "./i18n.js";
 
 interface Turn {
   role: "user" | "assistant";
@@ -9,28 +10,20 @@ interface Turn {
   data?: ChatResponse["data"];
 }
 
-const SUGGESTIONS = [
-  "cadastre o cliente Maria Souza, email maria@acme.com",
-  "crie uma proposta de 4200 para Maria Souza",
-  "lance uma receita de 5000 recebida da Maria",
-  "lance uma despesa de 1800 com fornecedor",
-  "quanto lucrei este mês?",
-  "qual meu fluxo de caixa?",
-  "chame o conselho: devo contratar um vendedor?",
-];
-
 export function App() {
+  const [lang, setLang] = useState<Lang>("pt");
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
+  const [showPricing, setShowPricing] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     health()
-      .then((h) => setStatus(`online · IA: ${h.llm} · ${h.tools} ferramentas`))
-      .catch(() => setStatus("API offline — rode `npm run dev`"));
-  }, []);
+      .then((h) => setStatus(`${t(lang, "online")} · IA: ${h.llm} · ${h.tools} ${t(lang, "tools")}`))
+      .catch(() => setStatus(t(lang, "offline")));
+  }, [lang]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -40,13 +33,13 @@ export function App() {
     const message = text.trim();
     if (!message || busy) return;
     setInput("");
-    setTurns((t) => [...t, { role: "user", text: message }]);
+    setTurns((prev) => [...prev, { role: "user", text: message }]);
     setBusy(true);
     try {
-      const res = await sendChat(message);
-      setTurns((t) => [...t, { role: "assistant", text: res.reply, steps: res.steps, data: res.data }]);
+      const res = await sendChat(message, lang);
+      setTurns((prev) => [...prev, { role: "assistant", text: res.reply, steps: res.steps, data: res.data }]);
     } catch (err) {
-      setTurns((t) => [...t, { role: "assistant", text: `⚠️ ${(err as Error).message}` }]);
+      setTurns((prev) => [...prev, { role: "assistant", text: `⚠️ ${(err as Error).message}` }]);
     } finally {
       setBusy(false);
     }
@@ -55,22 +48,25 @@ export function App() {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand">
-          <span className="logo">◆</span> AI Company OS
+        <div className="brand"><span className="logo">◆</span> AI Company OS</div>
+        <div className="topbar-right">
+          <button className="ghost" onClick={() => setShowPricing(true)}>{t(lang, "pricing")}</button>
+          <div className="lang">
+            <button className={lang === "pt" ? "on" : ""} onClick={() => setLang("pt")}>PT</button>
+            <button className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>EN</button>
+          </div>
+          <div className="status">{status}</div>
         </div>
-        <div className="status">{status}</div>
       </header>
 
       <main className="chat">
         {turns.length === 0 && (
           <div className="welcome">
-            <h1>Uma tela. Toda a empresa.</h1>
-            <p>Administre CRM, financeiro e mais — apenas conversando. Experimente:</p>
+            <h1>{t(lang, "tagline")}</h1>
+            <p>{t(lang, "intro")}</p>
             <div className="chips">
-              {SUGGESTIONS.map((s) => (
-                <button key={s} className="chip" onClick={() => submit(s)}>
-                  {s}
-                </button>
+              {suggestions(lang).map((s) => (
+                <button key={s} className="chip" onClick={() => submit(s)}>{s}</button>
               ))}
             </div>
           </div>
@@ -99,7 +95,7 @@ export function App() {
             </div>
           </div>
         ))}
-        {busy && <div className="turn assistant"><div className="bubble text muted">pensando…</div></div>}
+        {busy && <div className="turn assistant"><div className="bubble text muted">{t(lang, "thinking")}</div></div>}
         <div ref={endRef} />
       </main>
 
@@ -107,14 +103,96 @@ export function App() {
         <input
           value={input}
           disabled={busy}
-          placeholder="Converse com a sua empresa…"
+          placeholder={t(lang, "placeholder")}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && submit(input)}
         />
-        <button disabled={busy} onClick={() => submit(input)}>
-          Enviar
-        </button>
+        <button disabled={busy} onClick={() => submit(input)}>{t(lang, "send")}</button>
       </footer>
+
+      {showPricing && <Pricing lang={lang} onClose={() => setShowPricing(false)} />}
+    </div>
+  );
+}
+
+const COUNTRIES = ["BR", "US", "GB", "DE", "IN", "MX", "JP", "NG"];
+
+function Pricing({ lang, onClose }: { lang: Lang; onClose: () => void }) {
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [country, setCountry] = useState("BR");
+  const [planId, setPlanId] = useState("starter");
+  const [methods, setMethods] = useState<{ id: string; label: string }[]>([]);
+  const [method, setMethod] = useState("pix");
+  const [quote, setQuote] = useState<Quote | null>(null);
+
+  useEffect(() => { getPlans().then((r) => setPlans(r.plans)); }, []);
+  useEffect(() => {
+    getOptions(country).then((o) => {
+      setMethods(o.methods);
+      if (!o.methods.find((m) => m.id === method)) setMethod(o.methods[0]?.id ?? "card");
+    });
+  }, [country]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (planId && method) getQuote({ planId, country, method }).then(setQuote).catch(() => setQuote(null));
+  }, [planId, country, method]);
+
+  const fmt = (a: number, c: string) =>
+    ["BTC", "ETH", "USDT", "USDC"].includes(c) ? `${a} ${c}` : `${a.toLocaleString()} ${c}`;
+
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>{t(lang, "pricing")}</h2>
+          <button className="ghost" onClick={onClose}>{t(lang, "close")}</button>
+        </div>
+        <p className="muted">{t(lang, "globalNote")}</p>
+
+        <div className="plans">
+          {plans.map((p) => (
+            <button
+              key={p.id}
+              className={`plan ${p.highlighted ? "hot" : ""} ${planId === p.id ? "sel" : ""}`}
+              onClick={() => setPlanId(p.id)}
+            >
+              <div className="plan-name">{p.name}</div>
+              <div className="plan-price">
+                {p.basePriceMonthly === 0 ? "—" : `${t(lang, "from")} ${p.basePriceMonthly}`}{p.basePriceMonthly ? t(lang, "perMonth") : ""}
+              </div>
+              <ul>{p.features.map((f) => <li key={f}>{f}</li>)}</ul>
+            </button>
+          ))}
+        </div>
+
+        <div className="pay-row">
+          <label>
+            {t(lang, "chooseCountry")}
+            <select value={country} onChange={(e) => setCountry(e.target.value)}>
+              {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+          <label>
+            {t(lang, "method")}
+            <select value={method} onChange={(e) => setMethod(e.target.value)}>
+              {methods.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </label>
+        </div>
+
+        {quote && (
+          <div className="quote">
+            <div className="quote-box">
+              <div className="q-label">{t(lang, "youPay")}</div>
+              <div className="q-val">{fmt(quote.payin.amount, quote.payin.currency)}</div>
+            </div>
+            <div className="q-arrow">→</div>
+            <div className="quote-box owner">
+              <div className="q-label">{t(lang, "merchantReceives")}</div>
+              <div className="q-val">{fmt(quote.payout.amount, quote.payout.currency)}</div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -133,12 +211,7 @@ function DataCard({ kind, title, payload }: { kind: string; title: string; paylo
 }
 
 function KpiView({ payload }: { payload: Record<string, number> }) {
-  const labels: Record<string, string> = {
-    income: "Receita",
-    expense: "Despesa",
-    profit: "Lucro",
-    balance: "Saldo",
-  };
+  const labels: Record<string, string> = { income: "Receita", expense: "Despesa", profit: "Lucro", balance: "Saldo" };
   return (
     <div className="kpis">
       {Object.entries(payload).map(([k, v]) => (
@@ -164,9 +237,7 @@ function Deliberation({ payload }: { payload: DeliberationPayload }) {
       <div className="decision">Decisão: {payload.decision}</div>
       <ul>
         {payload.opinions.map((o, i) => (
-          <li key={i}>
-            <strong>{o.agent}</strong> <em>({o.vote})</em>: {o.argument}
-          </li>
+          <li key={i}><strong>{o.agent}</strong> <em>({o.vote})</em>: {o.argument}</li>
         ))}
       </ul>
       <div className="muted">{payload.rationale}</div>

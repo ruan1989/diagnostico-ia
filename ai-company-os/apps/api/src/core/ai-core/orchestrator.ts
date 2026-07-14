@@ -1,4 +1,4 @@
-import type { ChatResponse, ExecutedStep, RequestContext } from "@aicos/shared";
+import type { ChatResponse, ExecutedStep, Lang, RequestContext } from "@aicos/shared";
 import { AppError } from "../../platform/errors.js";
 import { agentForTool } from "../agents/definitions.js";
 import type { LlmProvider, LlmMessage, LlmToolSpec } from "../llm/types.js";
@@ -24,13 +24,13 @@ export class Orchestrator {
     private readonly memory: MemoryStore,
   ) {}
 
-  async handle(ctx: RequestContext, userMessage: string): Promise<ChatResponse> {
+  async handle(ctx: RequestContext, userMessage: string, lang: Lang = "pt"): Promise<ChatResponse> {
     const specs = this.toSpecs(ctx);
     const messages: LlmMessage[] = [...this.history(ctx), { role: "user", content: userMessage }];
     const steps: ExecutedStep[] = [];
     const data: NonNullable<ChatResponse["data"]> = [];
 
-    const system = this.buildSystem(ctx, userMessage);
+    const system = this.buildSystem(ctx, userMessage, lang);
     let reply = "";
 
     for (let i = 0; i < MAX_STEPS; i++) {
@@ -78,12 +78,16 @@ export class Orchestrator {
     }));
   }
 
-  private buildSystem(ctx: RequestContext, query: string): string {
+  private buildSystem(ctx: RequestContext, query: string, lang: Lang): string {
     const recalled = this.memory.recall(ctx, query);
     const facts = recalled.length
       ? `\n\nContexto conhecido da empresa:\n${recalled.map((r) => `- ${r.content}`).join("\n")}`
       : "";
-    return `${SYSTEM_PROMPT}\n\nEmpresa (tenant): ${ctx.tenantId}. Usuário: ${ctx.userId} (papel: ${ctx.role}).${facts}`;
+    const langLine =
+      lang === "en"
+        ? "\n\nRespond to the user in English."
+        : "\n\nResponda ao usuário em português.";
+    return `${SYSTEM_PROMPT}\n\nEmpresa (tenant): ${ctx.tenantId}. Usuário: ${ctx.userId} (papel: ${ctx.role}).${facts}${langLine}`;
   }
 
   private history(ctx: RequestContext): LlmMessage[] {

@@ -95,3 +95,51 @@ body {
   padding: 0 22px; border-radius: 12px; font-weight: 600; cursor: pointer;
 }
 .composer button:disabled { opacity: .5; cursor: not-allowed; }
+
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+.ghost {
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  padding: 7px 13px; border-radius: 9px; cursor: pointer; font-size: 13px;
+}
+.ghost:hover { border-color: var(--accent); }
+.lang { display: flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.lang button { background: var(--panel); color: var(--muted); border: none; padding: 6px 11px; cursor: pointer; font-size: 12px; }
+.lang button.on { background: var(--accent); color: white; }
+
+.modal-bg {
+  position: fixed; inset: 0; background: rgba(4,7,13,.7); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 18px;
+  padding: 24px; max-width: 900px; width: 100%; max-height: 90vh; overflow-y: auto;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; }
+.modal-head h2 { margin: 0; }
+
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 18px 0; }
+.plan {
+  text-align: left; background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px; cursor: pointer; color: var(--text);
+}
+.plan:hover { border-color: var(--accent); }
+.plan.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.plan.hot { background: linear-gradient(180deg, rgba(124,92,255,.15), var(--panel-2)); }
+.plan-name { font-weight: 700; }
+.plan-price { color: var(--accent); font-size: 15px; margin: 4px 0 8px; }
+.plan ul { margin: 0; padding-left: 16px; font-size: 12px; color: var(--muted); }
+.plan li { margin: 2px 0; }
+
+.pay-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.pay-row label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
+.pay-row select {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  padding: 9px 12px; border-radius: 9px; font-size: 14px; min-width: 160px;
+}
+
+.quote { display: flex; align-items: center; gap: 14px; margin-top: 20px; flex-wrap: wrap; }
+.quote-box { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; flex: 1; min-width: 160px; }
+.quote-box.owner { border-color: rgba(47,191,113,.5); }
+.q-label { font-size: 12px; color: var(--muted); }
+.q-val { font-size: 22px; font-weight: 700; margin-top: 4px; }
+.q-arrow { font-size: 24px; color: var(--accent); }

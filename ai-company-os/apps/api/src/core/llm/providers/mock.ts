@@ -16,12 +16,14 @@ export class MockLlmProvider implements LlmProvider {
 
   async complete(req: CompletionRequest): Promise<CompletionResult> {
     const last = req.messages[req.messages.length - 1];
+    const en = /in English/i.test(req.system); // idioma vem no system prompt
 
     // Se o último item já é resultado de ferramenta, encerramos com um resumo.
     const toolResults = req.messages.filter((m) => m.role === "tool");
     if (last?.role === "tool") {
       const summary = toolResults.map((m) => `• ${m.content}`).join("\n");
-      return { text: `Pronto. Aqui está o que fiz:\n${summary}`, toolCalls: [] };
+      const head = en ? "Done. Here's what I did:" : "Pronto. Aqui está o que fiz:";
+      return { text: `${head}\n${summary}`, toolCalls: [] };
     }
 
     const userText = [...req.messages].reverse().find((m) => m.role === "user")?.content ?? "";
@@ -30,9 +32,11 @@ export class MockLlmProvider implements LlmProvider {
 
     if (calls.length === 0) {
       return {
-        text:
-          "Entendi. Posso cadastrar clientes, criar propostas, lançar receitas/despesas, " +
-          "mostrar seu lucro e fluxo de caixa, ou reunir o conselho de agentes. O que deseja?",
+        text: en
+          ? "Got it. I can register customers, create proposals, record income/expenses, " +
+            "show your profit and cash flow, or convene the agent council. What would you like?"
+          : "Entendi. Posso cadastrar clientes, criar propostas, lançar receitas/despesas, " +
+            "mostrar seu lucro e fluxo de caixa, ou reunir o conselho de agentes. O que deseja?",
         toolCalls: [],
       };
     }
@@ -45,32 +49,34 @@ export class MockLlmProvider implements LlmProvider {
     const calls: LlmToolCall[] = [];
     const has = (name: string) => available.has(name);
 
-    // Conselho de agentes
-    if ((/\bconselho\b|delibere|debata|reúna os agentes/.test(t)) && has("council.deliberate")) {
-      const topic = text.replace(/.*conselho[:,]?\s*/i, "").trim() || text;
+    // Conselho de agentes (PT/EN)
+    if (/\bconselho\b|delibere|debata|reúna os agentes|\bcouncil\b|deliberate/.test(t) && has("council.deliberate")) {
+      const topic = text.replace(/.*(conselho|council)[:,]?\s*/i, "").trim() || text;
       return [{ name: "council.deliberate", input: { topic } }];
     }
 
-    // Cadastro de cliente
-    if (/cadastr\w+|nov[oa] cliente|adicion\w+ cliente/.test(t) && has("crm.create_customer")) {
+    // Cadastro de cliente (PT/EN)
+    if (/cadastr\w+|nov[oa] cliente|adicion\w+ cliente|register|add customer|new customer|create.*customer/.test(t) && has("crm.create_customer")) {
       const email = this.extractEmail(text);
       const name = this.extractPersonName(text) ?? "Novo Cliente";
       calls.push({ name: "crm.create_customer", input: { name, email: email ?? "" } });
       return calls;
     }
 
-    // Proposta / orçamento
-    if (/proposta|orçament|orcament/.test(t) && has("crm.create_proposal")) {
+    // Proposta / orçamento (PT/EN)
+    if (/proposta|orçament|orcament|proposal|quote/.test(t) && has("crm.create_proposal")) {
       const amount = this.extractAmount(text) ?? 0;
-      const customer = this.extractAfter(text, /para\s+/i) ?? this.extractPersonName(text) ?? "";
+      const customer = this.extractAfter(text, /(para|for|to)\s+/i) ?? this.extractPersonName(text) ?? "";
       return [{ name: "crm.create_proposal", input: { customer, amount } }];
     }
 
-    // Lançamento financeiro
-    if (/lanc\w+|lança|registr\w+|receb\w+|paguei|gast\w+|despesa|receita/.test(t) && has("finance.record_entry")) {
+    // Lançamento financeiro (PT/EN)
+    if (/lanc\w+|lança|registr\w+|receb\w+|paguei|gast\w+|despesa|receita|record|income|revenue|expense|paid|spent/.test(t) && has("finance.record_entry")) {
       const amount = this.extractAmount(text) ?? 0;
-      const isExpense = /despesa|paguei|gast\w+|pagar|conta/.test(t) && !/receita|receb/.test(t);
-      const description = this.extractAfter(text, /(de|da|do|com)\s+/i) ?? text.slice(0, 60);
+      const isExpense =
+        /despesa|paguei|gast\w+|pagar|conta|expense|paid|spent|cost/.test(t) &&
+        !/receita|receb|income|revenue/.test(t);
+      const description = this.extractAfter(text, /(de|da|do|com|from|for|with)\s+/i) ?? text.slice(0, 60);
       return [
         {
           name: "finance.record_entry",
@@ -79,18 +85,18 @@ export class MockLlmProvider implements LlmProvider {
       ];
     }
 
-    // Lucro
-    if (/lucr\w+|quanto (eu )?(ganhei|lucrei|faturei)/.test(t) && has("finance.profit")) {
+    // Lucro (PT/EN)
+    if (/lucr\w+|quanto (eu )?(ganhei|lucrei|faturei)|profit|earn/.test(t) && has("finance.profit")) {
       return [{ name: "finance.profit", input: {} }];
     }
 
-    // Fluxo de caixa
-    if (/fluxo de caixa|caixa|saldo/.test(t) && has("finance.cashflow")) {
+    // Fluxo de caixa (PT/EN)
+    if (/fluxo de caixa|caixa|saldo|cash ?flow|balance/.test(t) && has("finance.cashflow")) {
       return [{ name: "finance.cashflow", input: {} }];
     }
 
-    // Listar clientes
-    if (/(lista|listar|mostrar|meus)\s+.*clientes|clientes\b/.test(t) && has("crm.list_customers")) {
+    // Listar clientes (PT/EN)
+    if (/(lista|listar|mostrar|meus)\s+.*clientes|clientes\b|list.*customers|customers\b/.test(t) && has("crm.list_customers")) {
       return [{ name: "crm.list_customers", input: {} }];
     }
 
