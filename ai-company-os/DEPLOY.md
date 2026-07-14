@@ -14,19 +14,28 @@ Google / das configurações do seu repositório — eu não acesso nenhuma das 
 - **IndexNow**: `scripts/submit-indexnow.mjs` avisa Bing/Yandex/Seznam a cada
   deploy (o Google não usa IndexNow — ver passo 2).
 
-## Passo 1 — Ligar o deploy (1 clique, você)
+## Passo 1 — Habilitar o Pages (1 toggle, você)
 
-O GitHub Actions precisa estar habilitado no repositório:
+O GitHub Actions já está ativo e o workflow **rodou automaticamente**. Porém o
+auto-habilitar do Pages foi bloqueado pelo GitHub por segurança:
 
-1. Repositório → **Settings → Actions → General** → "Allow all actions".
-2. Merge desta PR na `main` (ou rode o workflow em **Actions → Deploy Company OS
-   Landing → Run workflow**).
+```
+Create Pages site failed. Error: Resource not accessible by integration
+```
 
-O workflow habilita o Pages sozinho e publica. Em ~1 min o site estará em
-`https://ruan1989.github.io/diagnostico-ia/`.
+Isso é esperado: o token do workflow **não tem permissão para criar o site Pages
+na primeira vez** — só o dono do repositório pode ligar isso. É 1 toggle:
 
-> Se preferir Pages por branch em vez de Actions: Settings → Pages → Source =
-> "GitHub Actions" (o workflow já usa esse modo).
+1. Repositório → **Settings → Pages → Build and deployment → Source** →
+   selecione **"GitHub Actions"**.
+2. (Se ainda falhar) **Settings → Actions → General → Workflow permissions** →
+   marque **"Read and write permissions"** → Save.
+3. Rode o deploy de novo: **Actions → "Deploy Company OS Landing" → Run workflow**
+   (ou faça qualquer push que toque `ai-company-os/landing/**`).
+
+Em ~1 min o site estará no ar em `https://ruan1989.github.io/diagnostico-ia/`.
+A partir daí, todo push republica sozinho (o token só precisa *criar* o site uma
+vez; depois só atualiza).
 
 ## Passo 2 — Conectar ao Google (2 cliques, você)
 
