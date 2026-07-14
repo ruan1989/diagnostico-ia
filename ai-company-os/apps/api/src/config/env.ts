@@ -13,6 +13,26 @@ export interface Env {
   payoutCurrency: string;
   /** Segredo para verificar assinaturas de webhook de pagamento. */
   webhookSecret: string;
+  /** Ambiente de execução. */
+  nodeEnv: string;
+  /** Origens permitidas no CORS (produção). Vazio = libera (apenas dev). */
+  allowedOrigins: string[];
+}
+
+const DEFAULT_SECRETS = new Set(["dev-secret", "change-me-in-production", "dev-webhook-secret", "change-me-too"]);
+
+/**
+ * Falha rápido em produção se segredos padrão forem detectados — impede subir
+ * com credenciais fracas por engano.
+ */
+export function assertProductionSafe(env: Env): void {
+  if (env.nodeEnv !== "production") return;
+  const weak: string[] = [];
+  if (DEFAULT_SECRETS.has(env.jwtSecret)) weak.push("JWT_SECRET");
+  if (DEFAULT_SECRETS.has(env.webhookSecret)) weak.push("WEBHOOK_SECRET");
+  if (weak.length) {
+    throw new Error(`Segredos padrão em produção: ${weak.join(", ")}. Defina valores fortes antes de subir.`);
+  }
 }
 
 export function loadEnv(): Env {
@@ -31,5 +51,7 @@ export function loadEnv(): Env {
     baseCurrency: process.env.BASE_CURRENCY ?? "BRL",
     payoutCurrency: process.env.MERCHANT_PAYOUT_CURRENCY ?? "BRL",
     webhookSecret: process.env.WEBHOOK_SECRET ?? process.env.JWT_SECRET ?? "dev-webhook-secret",
+    nodeEnv: process.env.NODE_ENV ?? "development",
+    allowedOrigins: (process.env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
   };
 }

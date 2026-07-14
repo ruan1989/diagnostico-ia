@@ -73,7 +73,7 @@ describe("Auth: signup, login, sessão e RBAC", () => {
 
   it("token adulterado é rejeitado", () => {
     const auth = new AuthService("seg", new AuditLog());
-    const { token } = auth.login("owner@demo.com", "demo");
+    const { token } = auth.login("owner@demo.com", "demo1234");
     expect(() => auth.resolve(token.slice(0, -3) + "xxx")).toThrow();
   });
 

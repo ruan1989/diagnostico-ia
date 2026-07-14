@@ -22,6 +22,8 @@ export function registerSecurity(app: FastifyInstance, c: Container): void {
     reply.header("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
     reply.header("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'");
     reply.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+    reply.header("Cross-Origin-Opener-Policy", "same-origin");
+    reply.header("Cross-Origin-Resource-Policy", "same-origin");
 
     // Health é isento para não atrapalhar probes de infraestrutura.
     if (req.url === "/health") return;

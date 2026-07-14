@@ -5,6 +5,7 @@ import { AppError } from "../platform/errors.js";
 import type { BillingCycle, PlanId } from "../billing/billing.service.js";
 import { Money } from "../billing/money.js";
 import type { PaymentMethod } from "../billing/regions.js";
+import { validate } from "../platform/validation.js";
 import { clientIp } from "./security.js";
 
 function bearer(header?: string): string | undefined {
@@ -27,16 +28,33 @@ export function registerRoutes(app: FastifyInstance, c: Container): void {
   app.post("/auth/signup", async (req, reply) => {
     const ip = clientIp(req);
     if (!c.limiters.auth.allow(`signup:${ip}`).ok) throw new AppError("Muitas tentativas. Aguarde.", 429, "rate_limited");
-    const { email, password } = (req.body ?? {}) as { email?: string; password?: string };
-    const result = c.auth.signup(String(email), String(password));
+    const b = validate<{ email: string; password: string }>(
+      { email: { type: "email", required: true }, password: { type: "string", required: true, max: 200 } },
+      req.body,
+    );
+    const result = c.auth.signup(b.email, b.password);
     return reply.status(201).send(result);
   });
 
   app.post("/auth/login", async (req) => {
     const ip = clientIp(req);
     if (!c.limiters.auth.allow(`login:${ip}`).ok) throw new AppError("Muitas tentativas. Aguarde.", 429, "rate_limited");
-    const { email, password } = (req.body ?? {}) as { email?: string; password?: string };
-    return c.auth.login(String(email), String(password), ip);
+    const b = validate<{ email: string; password: string; code?: string }>(
+      { email: { type: "email", required: true }, password: { type: "string", required: true, max: 200 }, code: { type: "string", max: 10 } },
+      req.body,
+    );
+    return c.auth.login(b.email, b.password, ip, b.code);
+  });
+
+  // 2FA (TOTP): configurar e ativar
+  app.post("/auth/2fa/setup", async (req) => {
+    const ctx = c.auth.resolve(bearer(req.headers.authorization));
+    return c.auth.setupTwoFactor(ctx);
+  });
+  app.post("/auth/2fa/enable", async (req) => {
+    const ctx = c.auth.resolve(bearer(req.headers.authorization));
+    const b = validate<{ code: string }>({ code: { type: "string", required: true, max: 10 } }, req.body);
+    return c.auth.enableTwoFactor(ctx, b.code);
   });
 
   // ── Chat (tela única) ─────────────────────────────────────────────
@@ -64,11 +82,13 @@ export function registerRoutes(app: FastifyInstance, c: Container): void {
   app.post("/funnel/intake", async (req) => {
     const ip = clientIp(req);
     if (!c.limiters.auth.allow(`intake:${ip}`).ok) throw new AppError("Muitas tentativas. Aguarde.", 429, "rate_limited");
-    const b = (req.body ?? {}) as { name?: string; contact?: string; need?: string; tenantId?: string };
-    if (!b.need?.trim()) throw new AppError("Descreva sua necessidade.");
+    const b = validate<{ name?: string; contact?: string; need: string; tenantId?: string }>(
+      { name: { type: "string", max: 120 }, contact: { type: "string", max: 200 }, need: { type: "string", required: true, max: 2000 }, tenantId: { type: "string", max: 64 } },
+      req.body,
+    );
     const lead = c.funnel.intake(
       { tenantId: b.tenantId ?? "demo" },
-      { name: String(b.name ?? "Prospecto"), contact: String(b.contact ?? ""), need: String(b.need), source: "web" },
+      { name: String(b.name ?? "Prospecto"), contact: String(b.contact ?? ""), need: b.need, source: "web" },
     );
     return {
       lead,

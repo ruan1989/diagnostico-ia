@@ -1,16 +1,22 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { buildContainer } from "./bootstrap.js";
+import { assertProductionSafe, loadEnv } from "./config/env.js";
 import { AppError } from "./platform/errors.js";
 import { registerRoutes } from "./http/routes.js";
 import { registerSecurity } from "./http/security.js";
 
 async function main(): Promise<void> {
-  const container = buildContainer();
+  const env = loadEnv();
+  assertProductionSafe(env); // aborta se segredos padrão em produção
+  const container = buildContainer(env);
   // bodyLimit: rejeita payloads > 256KB (anti-abuso).
   const app = Fastify({ logger: { level: "info", transport: undefined }, bodyLimit: 256 * 1024 });
 
-  await app.register(cors, { origin: true });
+  // CORS: em produção restringe às origens permitidas; em dev libera.
+  await app.register(cors, {
+    origin: env.allowedOrigins.length ? env.allowedOrigins : env.nodeEnv === "production" ? false : true,
+  });
   registerSecurity(app, container);
 
   // Varre buckets de rate limit periodicamente (evita vazamento de memória).

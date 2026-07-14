@@ -4,6 +4,7 @@ import {
   getAutomationsOn, getInsights, getOptions, getPlans, getQuote, getTasks, health, sendChat,
   setAutomationsOn, setTaskDone, type Insight, type Plan, type Quote, type Task,
 } from "./api.js";
+import { clearData, clearPin, hasPin, setPin, verifyPin } from "./engine/security.js";
 import { suggestions, t } from "./i18n.js";
 
 interface Turn {
@@ -23,6 +24,8 @@ export function App() {
   const [insights, setInsights] = useState<Insight[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [showInsights, setShowInsights] = useState(false);
+  const [showSecurity, setShowSecurity] = useState(false);
+  const [locked, setLocked] = useState(hasPin());
   const endRef = useRef<HTMLDivElement>(null);
 
   const refreshInsights = () => { getInsights(lang).then(setInsights).catch(() => {}); setTasks(getTasks()); };
@@ -57,6 +60,8 @@ export function App() {
     }
   }
 
+  if (locked) return <LockScreen lang={lang} onUnlock={() => setLocked(false)} />;
+
   return (
     <div className="shell">
       <header className="topbar">
@@ -65,6 +70,7 @@ export function App() {
           <button className="ghost insights-btn" onClick={() => setShowInsights(true)}>
             💡 {t(lang, "insights")}{alertCount > 0 && <span className="badge">{alertCount}</span>}
           </button>
+          <button className="ghost" onClick={() => setShowSecurity(true)}>🔒 {t(lang, "security")}</button>
           <button className="ghost" onClick={() => setShowPricing(true)}>{t(lang, "pricing")}</button>
           <div className="lang">
             <button className={lang === "pt" ? "on" : ""} onClick={() => setLang("pt")}>PT</button>
@@ -146,6 +152,91 @@ export function App() {
           onRefresh={refreshInsights}
         />
       )}
+      {showSecurity && <SecurityCenter lang={lang} onClose={() => setShowSecurity(false)} />}
+    </div>
+  );
+}
+
+function LockScreen({ lang, onUnlock }: { lang: Lang; onUnlock: () => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [err, setErr] = useState(false);
+  // Lê o valor direto do DOM (robusto contra corrida de estado do React).
+  const tryUnlock = async () => {
+    const pin = ref.current?.value ?? "";
+    if (await verifyPin(pin)) onUnlock();
+    else { setErr(true); if (ref.current) ref.current.value = ""; }
+  };
+  return (
+    <div className="lock-screen">
+      <form className="lock-box" onSubmit={(e) => { e.preventDefault(); void tryUnlock(); }}>
+        <div className="lock-logo">◆</div>
+        <h2>Company OS</h2>
+        <p className="muted">{t(lang, "pinEnter")}</p>
+        <input
+          ref={ref} className="pin-input" type="password" inputMode="numeric" autoFocus
+          onChange={() => setErr(false)}
+        />
+        {err && <div className="pin-err">{t(lang, "pinWrong")}</div>}
+        <button type="submit" className="cta-btn" onClick={(e) => { e.preventDefault(); void tryUnlock(); }}>{t(lang, "unlock")}</button>
+      </form>
+    </div>
+  );
+}
+
+interface Control { ok: boolean; label: string; scope: string }
+function SecurityCenter({ lang, onClose }: { lang: Lang; onClose: () => void }) {
+  const en = lang === "en";
+  const [pinOn, setPinOn] = useState(hasPin());
+  const [pin, setPinVal] = useState("");
+  const controls: Control[] = [
+    { ok: true, label: en ? "Password hashing (scrypt + salt)" : "Hash de senha (scrypt + salt)", scope: "backend" },
+    { ok: true, label: en ? "AES-256-GCM field encryption" : "Criptografia de campo AES-256-GCM", scope: "backend" },
+    { ok: true, label: en ? "Two-factor auth (TOTP)" : "Autenticação em 2 fatores (TOTP)", scope: "backend" },
+    { ok: true, label: en ? "Account lockout (brute-force)" : "Bloqueio de conta (brute-force)", scope: "backend" },
+    { ok: true, label: en ? "Signed sessions with expiry (HMAC)" : "Sessões assinadas com expiração (HMAC)", scope: "backend" },
+    { ok: true, label: "RBAC", scope: "backend" },
+    { ok: true, label: en ? "Rate limiting" : "Rate limiting", scope: "backend" },
+    { ok: true, label: en ? "Input validation" : "Validação de entrada", scope: "backend" },
+    { ok: true, label: en ? "Security headers (CSP/HSTS)" : "Cabeçalhos de segurança (CSP/HSTS)", scope: "backend" },
+    { ok: true, label: en ? "Webhook signature (HMAC)" : "Assinatura de webhook (HMAC)", scope: "backend" },
+    { ok: true, label: en ? "Audit trail" : "Trilha de auditoria", scope: "backend" },
+    { ok: true, label: en ? "Secrets fail-fast in production" : "Segredos: falha rápida em produção", scope: "backend" },
+    { ok: pinOn, label: en ? "PIN lock (this device)" : "Trava por PIN (este aparelho)", scope: "site" },
+  ];
+  const savePin = async () => { if (pin.length >= 4) { await setPin(pin); setPinOn(true); setPinVal(""); } };
+  const removePin = () => { clearPin(); setPinOn(false); };
+  const wipe = () => { clearData(); location.reload(); };
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>🔒 {t(lang, "security")}</h2>
+          <button className="ghost" onClick={onClose}>{t(lang, "close")}</button>
+        </div>
+        <p className="muted">{t(lang, "securitySub")}</p>
+        <div className="ctrl-list">
+          {controls.map((c) => (
+            <div key={c.label} className="ctrl">
+              <span className={c.ok ? "ctrl-ok" : "ctrl-off"}>{c.ok ? "✅" : "⬜"}</span>
+              <span className="ctrl-label">{c.label}</span>
+              <span className="ctrl-scope">{c.scope}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="tasks-head"><h3>🔐 {t(lang, "pinLock")}</h3></div>
+        {pinOn ? (
+          <button className="insight-run" onClick={removePin}>{t(lang, "pinRemove")}</button>
+        ) : (
+          <div className="pin-row">
+            <input className="pin-input small" type="password" inputMode="numeric" placeholder="••••" value={pin} onChange={(e) => setPinVal(e.target.value)} />
+            <button className="insight-run" onClick={savePin}>{t(lang, "pinSet")}</button>
+          </div>
+        )}
+
+        <div className="sec-note">{t(lang, "dataNote")}</div>
+        <button className="danger-btn" onClick={wipe}>{t(lang, "clearData")}</button>
+      </div>
     </div>
   );
 }

@@ -19,6 +19,14 @@
 | Trilha de auditoria + detecção de rajada de login | `platform/audit.ts` |
 | Zero armazenamento de dados de cartão (PCI-minded) | `billing/provider.ts` |
 | Limite de corpo de request (256KB) | `index.ts` |
+| **2FA (TOTP, RFC 6238)** — compatível com Google Authenticator | `platform/totp.ts` |
+| **Bloqueio de conta** após 5 falhas (anti brute force) | `modules/auth/auth.service.ts` |
+| **Validação de entrada** em todas as rotas sensíveis | `platform/validation.ts` |
+| **Política de senha** (mín. 8, letras + números) | `modules/auth/auth.service.ts` |
+| **Falha rápida** se segredos padrão em produção | `config/env.ts` |
+| **CORS restrito** por origem em produção | `index.ts` |
+| Cabeçalhos extras (COOP/CORP) | `http/security.ts` |
+| **Trava por PIN** no site (dispositivo compartilhado) | `web/engine/security.ts` |
 
 ## ⚠️ Falhas e limitações reais (estado atual)
 
@@ -26,13 +34,16 @@
 1. **Persistência in-memory / localStorage.** O backend guarda tudo em memória
    (perde no restart) e o site publicado guarda no `localStorage` do navegador.
    → No site estático, **os dados NÃO são privados nem sincronizados**: quem usa
-   o mesmo dispositivo vê os dados. Ótimo para demo, inaceitável para dados reais.
-2. **Autenticação de demonstração.** Há usuários fixos (`owner@demo.com` / `demo`)
-   e o resolver cai num "tenant demo" quando não há token. Em produção: remover
-   o fallback, exigir token sempre, e nunca embarcar credenciais.
+   o mesmo dispositivo vê os dados (a trava por PIN é só uma cortesia, contornável
+   por quem tem acesso ao aparelho). Ótimo para demo, inaceitável para dados reais.
+2. **Autenticação de demonstração.** Há usuários fixos (`owner@demo.com`) e o
+   resolver cai num "tenant demo" quando não há token. Em produção: remover o
+   fallback, exigir token sempre, e nunca embarcar credenciais.
 3. **Segredos via variáveis de ambiente simples** (`JWT_SECRET`, `WEBHOOK_SECRET`).
-   Precisam vir de um cofre (AWS Secrets Manager/Vault) com rotação.
-4. **Sem verificação de e-mail / 2FA.** Signup aceita qualquer e-mail sem confirmar.
+   Já há _fail-fast_ contra valores padrão em produção, mas ainda precisam vir de
+   um cofre (AWS Secrets Manager/Vault) com rotação.
+4. **Verificação de e-mail.** Signup ainda aceita e-mail sem confirmar (o 2FA por
+   TOTP já existe, mas a confirmação de e-mail no cadastro falta).
 
 ### Médias
 5. **Token guardado no cliente.** Em produção use cookie `HttpOnly` + `SameSite`

@@ -32,6 +32,16 @@ const PT: Dict = {
   tasks: "Tarefas automáticas",
   automations: "Automações ligadas",
   noTasks: "Nenhuma tarefa pendente. Aja no chat e a IA cria os follow-ups.",
+  security: "Segurança",
+  securitySub: "Controles de segurança do sistema. 'backend' = na API/arquitetura; 'site' = neste navegador.",
+  pinLock: "Trava por PIN (este aparelho)",
+  pinSet: "Definir PIN",
+  pinRemove: "Remover PIN",
+  pinEnter: "Digite seu PIN para desbloquear",
+  pinWrong: "PIN incorreto.",
+  unlock: "Desbloquear",
+  dataNote: "⚠️ Nesta demonstração, os dados ficam só neste navegador (localStorage) — não são privados em aparelho compartilhado. Para dados reais, use a Fase 1 do SECURITY.md.",
+  clearData: "Apagar meus dados deste navegador",
 };
 
 const EN: Dict = {
@@ -64,6 +74,16 @@ const EN: Dict = {
   tasks: "Automatic tasks",
   automations: "Automations on",
   noTasks: "No pending tasks. Act in the chat and the AI creates the follow-ups.",
+  security: "Security",
+  securitySub: "System security controls. 'backend' = in the API/architecture; 'site' = in this browser.",
+  pinLock: "PIN lock (this device)",
+  pinSet: "Set PIN",
+  pinRemove: "Remove PIN",
+  pinEnter: "Enter your PIN to unlock",
+  pinWrong: "Wrong PIN.",
+  unlock: "Unlock",
+  dataNote: "⚠️ In this demo, data stays only in this browser (localStorage) — not private on a shared device. For real data, use Phase 1 of SECURITY.md.",
+  clearData: "Erase my data from this browser",
 };
 
 const SUGGESTIONS: Record<Lang, string[]> = {
