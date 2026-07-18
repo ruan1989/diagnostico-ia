@@ -1,6 +1,11 @@
 import type { ChatResponse, Currency, Lang } from "@aicos/shared";
 import { engineChat, engineHealth, proactiveInsights, type Insight } from "./engine/engine.js";
 import { engineOptions, enginePlans, engineQuote } from "./engine/billing.js";
+import { aiChat, hasAiKey } from "./engine/ai.js";
+
+// Ferramentas de IA real (traga sua chave) e Sales Autopilot, expostas à UI.
+export { hasAiKey, setAiKey, clearAiKey, getAiModel, setAiModel, hasGoogleKey, getGoogleKey, setGoogleKey, clearGoogleKey } from "./engine/ai.js";
+export { runProspecting, importProspectAsLead, getProspects, type Prospect } from "./engine/engine.js";
 
 export type { Insight };
 /** Inteligência Proativa: insights/antecipações (client-side por padrão). */
@@ -19,7 +24,11 @@ const API = (import.meta.env.VITE_API_URL as string | undefined) || "";
 const useBackend = API.length > 0;
 
 export async function sendChat(message: string, lang: Lang, token?: string): Promise<ChatResponse> {
-  if (!useBackend) return engineChat(message, lang);
+  if (!useBackend) {
+    // IA real (Claude) quando o usuário configurou a chave; senão, motor demo.
+    if (hasAiKey()) return aiChat(message, lang);
+    return engineChat(message, lang);
+  }
   const res = await fetch(`${API}/chat`, {
     method: "POST",
     headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },

@@ -192,3 +192,19 @@ body {
 .sec-note { font-size: 12px; color: var(--muted); background: rgba(224,168,62,.08); border: 1px solid rgba(224,168,62,.3); border-radius: 8px; padding: 10px; margin: 18px 0 12px; }
 .danger-btn { background: transparent; border: 1px solid var(--fail); color: #ffb4b6; border-radius: 9px; padding: 9px 14px; cursor: pointer; font-size: 13px; }
 .danger-btn:hover { background: rgba(229,72,77,.12); }
+
+.apf { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); flex: 1; }
+.apf input, .key-input { background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 14px; width: 100%; }
+.key-input { margin: 6px 0; letter-spacing: 1px; }
+.prospects { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.prospect { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.prow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pscore { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; font-weight: 800;
+  font-size: 12px; border-radius: 999px; padding: 2px 9px; }
+.pmeta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.preason { font-size: 13px; margin-top: 6px; }
+.prospect details { margin-top: 8px; font-size: 13px; }
+.prospect summary { cursor: pointer; color: var(--accent); font-size: 12.5px; }
+.poutreach { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 13px; color: var(--muted); }
+.prospect .insight-run { margin-top: 8px; }

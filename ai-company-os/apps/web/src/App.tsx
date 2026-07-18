@@ -3,6 +3,8 @@ import type { ChatResponse, ExecutedStep, Lang } from "@aicos/shared";
 import {
   getAutomationsOn, getInsights, getOptions, getPlans, getQuote, getTasks, health, sendChat,
   setAutomationsOn, setTaskDone, type Insight, type Plan, type Quote, type Task,
+  runProspecting, importProspectAsLead, type Prospect,
+  hasAiKey, setAiKey, clearAiKey, getAiModel, setAiModel, hasGoogleKey, setGoogleKey, clearGoogleKey, getGoogleKey,
 } from "./api.js";
 import { clearData, clearPin, hasPin, setPin, verifyPin } from "./engine/security.js";
 import { suggestions, t } from "./i18n.js";
@@ -25,6 +27,9 @@ export function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [showInsights, setShowInsights] = useState(false);
   const [showSecurity, setShowSecurity] = useState(false);
+  const [showAutopilot, setShowAutopilot] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [aiOn, setAiOn] = useState(hasAiKey());
   const [locked, setLocked] = useState(hasPin());
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -67,11 +72,13 @@ export function App() {
       <header className="topbar">
         <div className="brand"><span className="logo">◆</span> Company OS</div>
         <div className="topbar-right">
+          <button className="ghost" onClick={() => setShowAutopilot(true)}>🚀 Autopilot</button>
           <button className="ghost insights-btn" onClick={() => setShowInsights(true)}>
             💡 {t(lang, "insights")}{alertCount > 0 && <span className="badge">{alertCount}</span>}
           </button>
           <button className="ghost" onClick={() => setShowSecurity(true)}>🔒 {t(lang, "security")}</button>
           <button className="ghost" onClick={() => setShowPricing(true)}>{t(lang, "pricing")}</button>
+          <button className="ghost" onClick={() => setShowSettings(true)} title="Configurar IA real / Google">{aiOn ? "🤖 IA real" : "⚙️"}</button>
           <div className="lang">
             <button className={lang === "pt" ? "on" : ""} onClick={() => setLang("pt")}>PT</button>
             <button className={lang === "en" ? "on" : ""} onClick={() => setLang("en")}>EN</button>
@@ -153,6 +160,96 @@ export function App() {
         />
       )}
       {showSecurity && <SecurityCenter lang={lang} onClose={() => setShowSecurity(false)} />}
+      {showAutopilot && <Autopilot lang={lang} onClose={() => setShowAutopilot(false)} onImported={refreshInsights} />}
+      {showSettings && <Settings lang={lang} onClose={() => setShowSettings(false)} onChange={() => setAiOn(hasAiKey())} />}
+    </div>
+  );
+}
+
+function Autopilot({ lang, onClose, onImported }: { lang: Lang; onClose: () => void; onImported: () => void }) {
+  const en = lang === "en";
+  const [type, setType] = useState(en ? "restaurants" : "restaurantes");
+  const [loc, setLoc] = useState(en ? "New York" : "São Paulo");
+  const [busy, setBusy] = useState(false);
+  const [list, setList] = useState<Prospect[]>([]);
+  const [done, setDone] = useState<Record<string, boolean>>({});
+  const search = async () => {
+    setBusy(true);
+    try { setList(await runProspecting(type, loc, getGoogleKey())); } finally { setBusy(false); }
+  };
+  const imp = (p: Prospect) => { importProspectAsLead(p.id); setDone((d) => ({ ...d, [p.id]: true })); onImported(); };
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head"><h2>🚀 Sales Autopilot</h2><button className="ghost" onClick={onClose}>{t(lang, "close")}</button></div>
+        <p className="muted">{en ? "Find potential customers by business type + city. The AI scores each one and drafts a compliant first message." : "Encontre potenciais clientes por tipo de negócio + cidade. A IA pontua cada um e redige a primeira abordagem (opt-in)."}</p>
+        <div className="pay-row">
+          <label className="apf">{en ? "Business type" : "Tipo de negócio"}<input value={type} onChange={(e) => setType(e.target.value)} /></label>
+          <label className="apf">{en ? "City" : "Cidade"}<input value={loc} onChange={(e) => setLoc(e.target.value)} /></label>
+        </div>
+        <button className="cta-btn" style={{ marginTop: 12 }} disabled={busy} onClick={search}>{busy ? (en ? "Searching…" : "Buscando…") : (en ? "Find leads" : "Buscar leads")}</button>
+        <p className="sec-note" style={{ marginTop: 14 }}>{hasGoogleKey() ? (en ? "✅ Using your Google Places key — real results." : "✅ Usando sua chave do Google Places — resultados reais.") : (en ? "ℹ️ No Google key set (⚙️) — showing a realistic sample. Add a key for real businesses." : "ℹ️ Sem chave do Google (⚙️) — mostrando amostra realista. Adicione a chave para empresas reais.")}</p>
+        <div className="prospects">
+          {list.map((p) => (
+            <div key={p.id} className="prospect">
+              <div className="prow"><b>{p.name}</b><span className="pscore">{p.score}</span></div>
+              <div className="pmeta">{p.rating ? `⭐ ${p.rating} · ${p.reviews} ${en ? "reviews" : "avaliações"}` : ""} {p.location ? `· ${p.location}` : ""}</div>
+              <div className="preason">{p.reason}</div>
+              <details><summary>{en ? "Draft outreach" : "Rascunho da abordagem"}</summary><p className="poutreach">{p.outreach}</p></details>
+              <button className="insight-run" disabled={done[p.id]} onClick={() => imp(p)}>{done[p.id] ? (en ? "✓ Imported to funnel" : "✓ Importado ao funil") : (en ? "Import as lead" : "Importar como lead")}</button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Settings({ lang, onClose, onChange }: { lang: Lang; onClose: () => void; onChange: () => void }) {
+  const en = lang === "en";
+  const [ai, setAi] = useState("");
+  const [gk, setGk] = useState("");
+  const [model, setModel] = useState(getAiModel());
+  const [aiSet, setAiSet] = useState(hasAiKey());
+  const [gSet, setGSet] = useState(hasGoogleKey());
+  const saveAi = () => { if (ai.trim()) { setAiKey(ai); setAiModel(model); setAiSet(true); setAi(""); onChange(); } };
+  const rmAi = () => { clearAiKey(); setAiSet(false); onChange(); };
+  const saveG = () => { if (gk.trim()) { setGoogleKey(gk); setGSet(true); setGk(""); } };
+  const rmG = () => { clearGoogleKey(); setGSet(false); };
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head"><h2>⚙️ {en ? "AI & integrations" : "IA & integrações"}</h2><button className="ghost" onClick={onClose}>{t(lang, "close")}</button></div>
+
+        <h3 style={{ margin: "6px 0 2px" }}>🤖 {en ? "Real AI (Anthropic Claude)" : "IA real (Anthropic Claude)"}</h3>
+        <p className="muted small">{en ? "Paste YOUR Anthropic API key to switch from the demo engine to real Claude with tool-calling. The key stays only in this browser." : "Cole a SUA chave da Anthropic para trocar o motor demo pelo Claude real com tool-calling. A chave fica só neste navegador."}</p>
+        {aiSet ? (
+          <div className="pin-row"><span className="ctrl-ok">✅ {en ? "Real AI enabled" : "IA real ativada"}</span><button className="insight-run" onClick={rmAi}>{en ? "Remove key" : "Remover chave"}</button></div>
+        ) : (
+          <>
+            <input className="key-input" type="password" placeholder="sk-ant-..." value={ai} onChange={(e) => setAi(e.target.value)} />
+            <div className="pin-row">
+              <select value={model} onChange={(e) => setModel(e.target.value)}>
+                <option value="claude-haiku-4-5-20251001">Haiku 4.5 (rápido/barato)</option>
+                <option value="claude-sonnet-5">Sonnet 5 (equilíbrio)</option>
+                <option value="claude-opus-4-8">Opus 4.8 (máximo)</option>
+              </select>
+              <button className="insight-run" onClick={saveAi}>{en ? "Save" : "Salvar"}</button>
+            </div>
+            <p className="muted small">{en ? "Get a key at console.anthropic.com. Usage is billed to your account." : "Pegue a chave em console.anthropic.com. O uso é cobrado na sua conta."}</p>
+          </>
+        )}
+
+        <h3 style={{ margin: "18px 0 2px" }}>🌍 Google Places {en ? "(lead search)" : "(busca de leads)"}</h3>
+        <p className="muted small">{en ? "Optional: paste a Google Places API key so Sales Autopilot finds real businesses." : "Opcional: cole uma chave da Google Places API para o Autopilot achar empresas reais."}</p>
+        {gSet ? (
+          <div className="pin-row"><span className="ctrl-ok">✅ {en ? "Google key set" : "Chave do Google salva"}</span><button className="insight-run" onClick={rmG}>{en ? "Remove" : "Remover"}</button></div>
+        ) : (
+          <div className="pin-row"><input className="key-input" type="password" placeholder="AIza..." value={gk} onChange={(e) => setGk(e.target.value)} /><button className="insight-run" onClick={saveG}>{en ? "Save" : "Salvar"}</button></div>
+        )}
+
+        <div className="sec-note" style={{ marginTop: 16 }}>{en ? "⚠️ Bring-your-own-key is for this demo. In production, keys live in a server vault — never in the browser. Outreach must be opt-in (no mass spam)." : "⚠️ 'Traga sua chave' é para esta demo. Em produção, as chaves ficam num cofre no servidor — nunca no navegador. A abordagem deve ser opt-in (sem spam em massa)."}</div>
+      </div>
     </div>
   );
 }
@@ -388,6 +485,16 @@ function DataCard({ kind, title, payload }: { kind: string; title: string; paylo
             <div key={i.id} className={`insight sev-${i.severity}`}>
               <div className="insight-title">{{ critical: "🔴", warn: "🟡", info: "🔵", success: "🟢" }[i.severity]} {i.title}</div>
               <div className="insight-msg">{i.message}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {kind === "prospects" && (
+        <div className="ins">
+          {(payload as Prospect[]).slice(0, 6).map((p) => (
+            <div key={p.id} className="insi info">
+              <div className="insight-title">{p.name} <span className="pscore">{p.score}</span></div>
+              <div className="insight-msg">{p.rating ? `⭐ ${p.rating} · ${p.reviews} avaliações — ` : ""}{p.reason}</div>
             </div>
           ))}
         </div>

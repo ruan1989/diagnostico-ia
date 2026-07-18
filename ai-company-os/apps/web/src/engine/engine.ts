@@ -17,6 +17,11 @@ interface Entry { id: string; type: "income" | "expense"; amount: number; curren
 interface Lead { id: string; name: string; contact: string; need: string; area: string; stage: string; score: number; createdAt: string }
 
 export interface Task { id: string; title: string; due: string; source: string; done: boolean; key: string }
+export interface Prospect {
+  id: string; name: string; category: string; location: string;
+  phone?: string; website?: string; rating?: number; reviews?: number;
+  score: number; reason: string; outreach: string; source: string;
+}
 
 interface State {
   customers: Customer[];
@@ -25,11 +30,12 @@ interface State {
   leads: Lead[];
   memory: string[];
   tasks: Task[];
+  prospects: Prospect[];
   automationsOn: boolean;
 }
 
 const KEY = "companyos_state_v1";
-const EMPTY: State = { customers: [], proposals: [], entries: [], leads: [], memory: [], tasks: [], automationsOn: true };
+const EMPTY: State = { customers: [], proposals: [], entries: [], leads: [], memory: [], tasks: [], prospects: [], automationsOn: true };
 
 function load(): State {
   try {
@@ -112,8 +118,100 @@ function scoreLead(t: string): number {
   return Math.min(100, n);
 }
 
+// ── Sales Autopilot: prospecção de leads (Google Places + fallback) ────────
+const PROSPECT_ADJ = ["Central", "Prime", "Express", "Vila", "Aurora", "Nova", "Boa", "Real", "Bella", "Estrela", "Ponto", "Bom", "Mundo", "Casa", "Grande"];
+const PROSPECT_SUFFIX = ["& Cia", "Ltda", "ME", "Group", "Hub", "Studio", "Center", "Place", "House", ""];
+
+/** Rascunho de abordagem personalizado e COMPLIANT (opt-in, sem spam em massa). */
+function draftOutreach(name: string, category: string): string {
+  return `Olá, ${name}! Vi que vocês atuam com ${category}. Ajudamos negócios como o seu a organizar CRM, financeiro e atendimento numa tela só, com IA. Posso te enviar uma demonstração de 2 minutos? (responda apenas se fizer sentido)`;
+}
+
+/** Gera prospects realistas (fallback sem chave do Google). */
+function generateProspects(businessType: string, location: string, n = 6): Prospect[] {
+  const out: Prospect[] = [];
+  for (let i = 0; i < n; i++) {
+    const name = `${PROSPECT_ADJ[Math.floor(Math.random() * PROSPECT_ADJ.length)]} ${businessType} ${PROSPECT_SUFFIX[Math.floor(Math.random() * PROSPECT_SUFFIX.length)]}`.trim();
+    const rating = Math.round((3.4 + Math.random() * 1.6) * 10) / 10;
+    const reviews = Math.floor(20 + Math.random() * 400);
+    const score = Math.min(98, Math.round(40 + rating * 8 + Math.min(reviews, 300) / 12));
+    out.push({
+      id: uid(), name, category: businessType, location,
+      phone: `+55 11 9${Math.floor(1000 + Math.random() * 8999)}-${Math.floor(1000 + Math.random() * 8999)}`,
+      website: `${name.toLowerCase().replace(/[^a-z]+/g, "")}.com.br`,
+      rating, reviews, score,
+      reason: `Nota ${rating} com ${reviews} avaliações — porte e reputação indicam orçamento para automatizar operações.`,
+      outreach: draftOutreach(name, businessType), source: "amostra",
+    });
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+
+/** Busca real no Google Places (Text Search) quando há chave. */
+export async function placesSearch(businessType: string, location: string, apiKey: string): Promise<Prospect[]> {
+  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "X-Goog-Api-Key": apiKey,
+      "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri",
+    },
+    body: JSON.stringify({ textQuery: `${businessType} em ${location}`, languageCode: "pt-BR", maxResultCount: 10 }),
+  });
+  if (!res.ok) throw new Error(`Google Places ${res.status}: ${await res.text()}`);
+  const json = (await res.json()) as { places?: Array<Record<string, unknown>> };
+  return (json.places ?? []).map((p) => {
+    const name = ((p.displayName as { text?: string })?.text) ?? "Empresa";
+    const rating = (p.rating as number) ?? 0;
+    const reviews = (p.userRatingCount as number) ?? 0;
+    const score = Math.min(98, Math.round(40 + rating * 8 + Math.min(reviews, 300) / 12));
+    return {
+      id: uid(), name, category: businessType, location: (p.formattedAddress as string) ?? location,
+      phone: (p.nationalPhoneNumber as string) ?? undefined, website: (p.websiteUri as string) ?? undefined,
+      rating, reviews, score,
+      reason: rating ? `Nota ${rating} com ${reviews} avaliações — reputação e volume indicam potencial de compra.` : "Empresa encontrada no Google — potencial a qualificar.",
+      outreach: draftOutreach(name, businessType), source: "google",
+    } as Prospect;
+  }).sort((a, b) => b.score - a.score);
+}
+
+/** Prospecção com fallback: usa Google se houver chave, senão amostra realista. */
+export async function runProspecting(businessType: string, location: string, googleKey?: string): Promise<Prospect[]> {
+  let list: Prospect[];
+  try {
+    list = googleKey ? await placesSearch(businessType, location, googleKey) : generateProspects(businessType, location);
+  } catch {
+    list = generateProspects(businessType, location);
+  }
+  state.prospects = list; save();
+  return list;
+}
+
+export function importProspectAsLead(id: string): Lead | undefined {
+  const p = state.prospects.find((x) => x.id === id);
+  if (!p) return;
+  const lead: Lead = {
+    id: uid(), name: p.name, contact: p.phone ?? p.website ?? "", need: `Prospecção ${p.category} — ${p.reason}`,
+    area: "sales", stage: p.score >= 60 ? "qualified" : "new", score: p.score, createdAt: new Date().toISOString(),
+  };
+  state.leads.push(lead); save();
+  return lead;
+}
+export function getProspects(): Prospect[] { return state.prospects; }
+
 function tool(name: string, input: Record<string, unknown>, lang: Lang = "pt"): ToolResult {
   switch (name) {
+    case "sales.find_leads": {
+      const type = String(input.businessType ?? input.query ?? "empresas");
+      const location = String(input.location ?? "Brasil");
+      const list = generateProspects(type, location);
+      state.prospects = list; save();
+      return {
+        ok: true,
+        summary: `Encontrei ${list.length} potenciais clientes de "${type}" em ${location} (amostra). Abra o Sales Autopilot para ver, pontuar e importar. Com sua chave do Google, a busca é real.`,
+        data: { kind: "prospects", title: "Sales Autopilot — leads encontrados", payload: list },
+      };
+    }
     case "insights.review": {
       const list = proactiveInsights(lang);
       const top = list.slice(0, 3).map((i) => `• ${i.title}: ${i.message}`).join("\n");
@@ -322,6 +420,13 @@ function plan(text: string): Array<{ name: string; input: Record<string, unknown
 
 function planClause(text: string): Array<{ name: string; input: Record<string, unknown> }> {
   const t = text.toLowerCase();
+  if (/encontr|prospect|busq|ache clientes|gere leads|find (me )?(leads|customers|clients|prospects)|new customers|novos clientes/.test(t)) {
+    const location = extractAfter(text, /\b(em|in|na cidade de|na|no)\s+/i) ?? "Brasil";
+    const businessType = text
+      .replace(/.*?(encontr\w*|prospect\w*|busq\w*|ache|find(\sme)?|gere leads|novos clientes de)\s*/i, "")
+      .replace(/\b(em|in|na|no)\s+.*/i, "").replace(/clientes|leads|potenciais|de/gi, "").trim() || "empresas";
+    return [{ name: "sales.find_leads", input: { businessType, location } }];
+  }
   if (/análise|analise|insight|o que (eu )?(devo|faço|fazer)|sugest|revis|diagnóstic|diagnostic|what should i|review|analy[sz]e/.test(t))
     return [{ name: "insights.review", input: {} }];
   if (/\bconselho\b|delibere|debata|\bcouncil\b|deliberate/.test(t))
@@ -379,5 +484,32 @@ export function engineChat(message: string, lang: Lang): ChatResponse {
 }
 
 export function engineHealth() {
-  return { status: "ok", llm: "browser (mock)", tools: 9, baseCurrency: "BRL" as Currency, payoutCurrency: "BRL" as Currency };
+  return { status: "ok", llm: "browser (mock)", tools: 10, baseCurrency: "BRL" as Currency, payoutCurrency: "BRL" as Currency };
 }
+
+// ── Interface para a IA REAL (Claude tool-use no navegador) ────────────────
+export type ToolResultPublic = ToolResult;
+export function executeTool(internalName: string, input: Record<string, unknown>, lang: Lang = "pt"): ToolResult {
+  return tool(internalName, input, lang);
+}
+export function agentForToolName(name: string): string { return agentFor(name); }
+/** Após ações do LLM, roda automações + devolve o insight urgente (proatividade). */
+export function postActionNudge(lang: Lang): { autoCreated: number; urgent?: Insight } {
+  const autoCreated = runAutomations();
+  const urgent = proactiveInsights(lang).find((i) => i.severity === "critical" || i.severity === "warn");
+  return { autoCreated, urgent };
+}
+
+/** Definições das ferramentas para o Claude (nomes sem ponto p/ a API). */
+export const TOOL_SPECS: Array<{ name: string; tool: string; description: string; input_schema: Record<string, unknown> }> = [
+  { name: "crm_create_customer", tool: "crm.create_customer", description: "Cadastra um cliente/lead no CRM.", input_schema: { type: "object", properties: { name: { type: "string" }, email: { type: "string" } }, required: ["name"] } },
+  { name: "crm_list_customers", tool: "crm.list_customers", description: "Lista os clientes do CRM.", input_schema: { type: "object", properties: {} } },
+  { name: "crm_create_proposal", tool: "crm.create_proposal", description: "Cria e envia uma proposta para um cliente.", input_schema: { type: "object", properties: { customer: { type: "string" }, amount: { type: "number" } }, required: ["customer", "amount"] } },
+  { name: "finance_record_entry", tool: "finance.record_entry", description: "Registra receita ou despesa.", input_schema: { type: "object", properties: { type: { type: "string", enum: ["income", "expense"] }, amount: { type: "number" }, description: { type: "string" } }, required: ["type", "amount"] } },
+  { name: "finance_profit", tool: "finance.profit", description: "Lucro do mês (receitas - despesas).", input_schema: { type: "object", properties: {} } },
+  { name: "finance_cashflow", tool: "finance.cashflow", description: "Fluxo de caixa acumulado.", input_schema: { type: "object", properties: {} } },
+  { name: "funnel_qualify", tool: "funnel.qualify", description: "Qualifica um lead e roteia para a área.", input_schema: { type: "object", properties: { name: { type: "string" }, contact: { type: "string" }, need: { type: "string" } }, required: ["name", "need"] } },
+  { name: "sales_find_leads", tool: "sales.find_leads", description: "Prospecta potenciais clientes por tipo de negócio e cidade (Sales Autopilot).", input_schema: { type: "object", properties: { businessType: { type: "string" }, location: { type: "string" } }, required: ["businessType"] } },
+  { name: "insights_review", tool: "insights.review", description: "Análise proativa: antecipa riscos e próximos passos.", input_schema: { type: "object", properties: {} } },
+  { name: "council_deliberate", tool: "council.deliberate", description: "Reúne o conselho de agentes para decidir um tema.", input_schema: { type: "object", properties: { topic: { type: "string" } }, required: ["topic"] } },
+];

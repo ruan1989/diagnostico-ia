@@ -46,6 +46,8 @@ chamando ferramentas reais dos módulos. Cada empresa (tenant) tem seu próprio
 | Métodos: PIX, Boleto, Cartão, SEPA, ACH, FedNow, UPI, SPEI, OXXO, iDEAL, PayPal, Cripto | ✅ roteamento por país |
 | Planos a partir de **250/mês** (Trial/Starter/Business/Enterprise/White-Label) | ✅ funcional |
 | **Bilíngue PT/EN** (interface + IA) | ✅ funcional |
+| **IA real (traga sua chave)** — Claude com _tool calling_ no navegador | ✅ funcional (BYO key) |
+| **Sales Autopilot** — prospecção de leads (Google Places + amostra), score e abordagem | ✅ funcional |
 | **Funil + chat de qualificação** (identifica necessidade → roteia para a área) | ✅ funcional |
 | **Segurança**: hash scrypt, AES-256-GCM, RBAC, rate limit, headers, auditoria | ✅ funcional |
 | **Pagamento seguro**: idempotência, webhook assinado (HMAC), zero dados de cartão | ✅ funcional |
