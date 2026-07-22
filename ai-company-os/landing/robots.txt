@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ruan1989.github.io/diagnostico-ia/sitemap.xml

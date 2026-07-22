@@ -1,0 +1,25 @@
+name: Company OS CI
+
+# CI do Company OS (na raiz correta do repo para o GitHub Actions enxergar).
+on:
+  push:
+    paths: ["ai-company-os/**", ".github/workflows/company-os-ci.yml"]
+  pull_request:
+    paths: ["ai-company-os/**"]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-company-os
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build

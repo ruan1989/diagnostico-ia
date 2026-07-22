@@ -1,0 +1,36 @@
+name: Security Scan (Company OS)
+
+on:
+  push:
+    paths: ["ai-company-os/**", ".github/workflows/security-scan.yml"]
+  pull_request:
+    paths: ["ai-company-os/**"]
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-company-os
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      # Vulnerabilidades em dependências (não bloqueia; reporta).
+      - name: npm audit
+        run: npm audit --audit-level=high || true
+      # Varredura simples de segredos vazados no código.
+      - name: secret scan
+        run: |
+          echo "Procurando possíveis segredos commitados..."
+          if grep -rInE "(AKIA[0-9A-Z]{16}|-----BEGIN (RSA|EC|OPENSSH) PRIVATE KEY-----|sk_live_[0-9a-zA-Z]{20,})" \
+             --include='*.ts' --include='*.js' --include='*.json' --include='*.env*' \
+             apps packages scripts 2>/dev/null; then
+            echo "::error::Possível segredo encontrado no código."; exit 1
+          fi
+          echo "Nenhum segredo óbvio encontrado."
+      # Testes de segurança (2FA, lockout, validação, criptografia, webhook).
+      - run: npm test

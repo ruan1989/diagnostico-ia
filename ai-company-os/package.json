@@ -1,0 +1,25 @@
+{
+  "name": "ai-company-os",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Company OS — o sistema operacional da empresa, operado por conversa.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,magenta \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev --workspace @aicos/api",
+    "dev:web": "npm run dev --workspace @aicos/web",
+    "build": "npm run build --workspace @aicos/shared && npm run build --workspace @aicos/api && npm run build --workspace @aicos/web",
+    "test": "npm run test --workspace @aicos/api",
+    "lint": "npm run lint --workspace @aicos/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

@@ -1,0 +1,54 @@
+name: Deploy Company OS to GitHub Pages
+
+# Compila o app web (Company OS funcional, 100% client-side) e publica no Pages.
+on:
+  push:
+    branches: [main, claude/ai-company-os-platform-7b8eqa]
+    paths:
+      - "ai-company-os/apps/web/**"
+      - "ai-company-os/packages/shared/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-company-os
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - name: Build shared + web
+        run: |
+          npm run build --workspace @aicos/shared
+          npm run build --workspace @aicos/web
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ai-company-os/apps/web/dist
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
