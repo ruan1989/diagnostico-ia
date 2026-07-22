@@ -60,6 +60,17 @@ export class MockLlmProvider implements LlmProvider {
       return [{ name: "council.deliberate", input: { topic } }];
     }
 
+    // Qualificação de lead (PT/EN) — antes de "proposta", pois a frase pode contê-la
+    if (/qualifi|qualific|novo lead|new lead/.test(t) && has("funnel.qualify")) {
+      const name = this.extractPersonName(text) ?? "Prospecto";
+      return [{ name: "funnel.qualify", input: { name, need: text } }];
+    }
+
+    // Funil / pipeline (PT/EN)
+    if (/\bfunil\b|pipeline|funnel/.test(t) && has("funnel.pipeline")) {
+      return [{ name: "funnel.pipeline", input: {} }];
+    }
+
     // Cadastro de cliente (PT/EN)
     if (/cadastr\w+|nov[oa] cliente|adicion\w+ cliente|register|add customer|new customer|create.*customer/.test(t) && has("crm.create_customer")) {
       const email = this.extractEmail(text);

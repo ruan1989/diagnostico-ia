@@ -41,14 +41,20 @@ describe("Funil: identifica necessidade e roteia", () => {
     expect(c.crm.customers.list("demo").some((cu) => cu.name === "Bruno Lead")).toBe(true);
   });
 
-  it("qualifica lead via ferramenta da IA", async () => {
+  it("roteia 'qualifique o lead …' para funnel.qualify mesmo contendo 'proposta'", async () => {
     const c = buildContainer();
     const res = await c.orchestrator.handle(
       { tenantId: "demo", userId: "u", role: "owner" },
-      "qualifique o lead: nome Carlos, precisa de proposta para a empresa dele",
+      "qualifique o lead: Carlos precisa de proposta urgente para a empresa dele",
     );
-    // a ferramenta pode ou não ser escolhida pelo mock; se foi, deve ter sucesso
-    const step = res.steps.find((s) => s.tool === "funnel.qualify");
-    if (step) expect(step.ok).toBe(true);
+    expect(res.steps[0]?.tool).toBe("funnel.qualify");
+    expect(res.steps[0]?.ok).toBe(true);
+  });
+
+  it("roteia 'mostre o funil' para funnel.pipeline", async () => {
+    const c = buildContainer();
+    const res = await c.orchestrator.handle({ tenantId: "demo", userId: "u", role: "owner" }, "mostre o funil");
+    expect(res.steps[0]?.tool).toBe("funnel.pipeline");
+    expect(res.steps[0]?.ok).toBe(true);
   });
 });

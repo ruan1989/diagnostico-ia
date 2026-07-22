@@ -28,7 +28,7 @@ export const AGENTS: Agent[] = [
     title: "Gerente Comercial",
     personality: "Persuasivo, orientado a metas, rápido no follow-up.",
     goals: ["Aumentar conversão", "Encurtar o ciclo de vendas", "Cuidar do funil"],
-    toolPrefixes: ["crm."],
+    toolPrefixes: ["crm.", "funnel.", "sales."],
   },
   {
     id: "marketing",
@@ -52,7 +52,7 @@ export const AGENTS: Agent[] = [
     title: "Analista de BI",
     personality: "Curioso, cético, transforma dados em decisões.",
     goals: ["Explicar os números", "Achar padrões", "Antecipar problemas"],
-    toolPrefixes: ["bi.", "analytics."],
+    toolPrefixes: ["bi.", "analytics.", "insights."],
   },
 ];
 

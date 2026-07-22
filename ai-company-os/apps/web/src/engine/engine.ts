@@ -57,10 +57,10 @@ export function resetState() {
 const AGENTS = [
   { id: "ceo", name: "CEO AI", title: "Diretor Executivo", goals: ["Maximizar valor", "Coordenar agentes"], prefixes: ["council."] },
   { id: "finance", name: "Finance AI", title: "Diretor Financeiro", goals: ["Proteger o caixa", "Maximizar lucro"], prefixes: ["finance."] },
-  { id: "sales", name: "Sales AI", title: "Gerente Comercial", goals: ["Aumentar conversão", "Cuidar do funil"], prefixes: ["crm.", "funnel."] },
+  { id: "sales", name: "Sales AI", title: "Gerente Comercial", goals: ["Aumentar conversão", "Cuidar do funil"], prefixes: ["crm.", "funnel.", "sales."] },
   { id: "marketing", name: "Marketing AI", title: "Analista de Marketing", goals: ["Gerar demanda", "Reduzir CAC"], prefixes: ["marketing."] },
   { id: "hr", name: "HR AI", title: "Gerente de RH", goals: ["Contratar bem", "Reter talentos"], prefixes: ["hr."] },
-  { id: "analytics", name: "Analytics AI", title: "Analista de BI", goals: ["Explicar números", "Achar padrões"], prefixes: ["bi."] },
+  { id: "analytics", name: "Analytics AI", title: "Analista de BI", goals: ["Explicar números", "Achar padrões"], prefixes: ["bi.", "insights."] },
 ];
 function agentFor(tool: string): string {
   return AGENTS.find((a) => a.prefixes.some((p) => tool.startsWith(p)))?.name ?? "Company AI";
@@ -431,7 +431,7 @@ function planClause(text: string): Array<{ name: string; input: Record<string, u
     return [{ name: "insights.review", input: {} }];
   if (/\bconselho\b|delibere|debata|\bcouncil\b|deliberate/.test(t))
     return [{ name: "council.deliberate", input: { topic: text.replace(/.*(conselho|council)[:,]?\s*/i, "").trim() || text } }];
-  if (/qualifi|lead|prospect/.test(t))
+  if (/qualifi|qualific|novo lead|new lead/.test(t))
     return [{ name: "funnel.qualify", input: { name: extractName(text) ?? "Prospecto", need: text } }];
   if (/funil|pipeline/.test(t)) return [{ name: "funnel.pipeline", input: {} }];
   if (/cadastr\w+|nov[oa] cliente|adicion\w+ cliente|register|add customer|new customer|create.*customer/.test(t))
