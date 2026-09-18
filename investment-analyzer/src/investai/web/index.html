@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InvestAI — Painel de Oportunidades</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f16'/%3E%3Cpath d='M6 22l6-7 5 4 8-11' stroke='%234b9fff' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header>
+  <div class="header-row">
+    <div class="logo">Invest<span>AI</span></div>
+    <span id="badge-modo" class="badge badge-paper">simulação</span>
+    <span id="badge-motor" class="badge badge-off"><i class="dot"></i>motor parado</span>
+    <span id="badge-conexao" class="badge badge-off"><i class="dot"></i>sem chave</span>
+    <span id="badge-kill" class="badge badge-warn" style="display:none">kill switch</span>
+    <div class="spacer"></div>
+    <div>
+      <label for="token" style="display:inline;margin-right:6px">Token da API</label>
+      <input id="token" type="password" placeholder="X-API-Token" style="width:180px;display:inline-block"
+             autocomplete="off">
+    </div>
+  </div>
+  <nav>
+    <button data-aba="oportunidades" class="ativo">Oportunidades cripto</button>
+    <button data-aba="matriz">Matriz de mercado</button>
+    <button data-aba="renda">Renda passiva (FII)</button>
+    <button data-aba="operacao">Operação &amp; Bitget</button>
+    <button data-aba="historico">Histórico</button>
+  </nav>
+</header>
+
+<main>
+
+<div class="aviso aviso-critico">
+  <strong>Leia antes de usar.</strong>
+  Não existe entrada com acerto garantido em mercado futuro de criptomoedas.
+  Este sistema mede probabilidades em dados históricos e recusa operar quando a
+  evidência é fraca — é isso que ele faz de útil. Os campos
+  &ldquo;probabilidade&rdquo; e &ldquo;retorno esperado&rdquo; são estimativas
+  estatísticas com margem de erro, não promessas de resultado. Futuros com
+  alavancagem podem liquidar a posição e zerar a conta.
+  <span id="aviso-dados"></span>
+</div>
+
+<!-- ======================================================= OPORTUNIDADES -->
+<section class="aba ativa" id="aba-oportunidades">
+  <div class="grid grid-kpi">
+    <div class="card"><div class="card-titulo">Operáveis agora</div>
+      <div class="kpi-valor" id="kpi-operaveis">—</div>
+      <div class="kpi-sub">grade A ou B</div></div>
+    <div class="card"><div class="card-titulo">Em observação</div>
+      <div class="kpi-valor warn" id="kpi-observacao">—</div>
+      <div class="kpi-sub">score bom, sem lastro estatístico</div></div>
+    <div class="card"><div class="card-titulo">Analisados</div>
+      <div class="kpi-valor dim" id="kpi-analisados">—</div>
+      <div class="kpi-sub" id="kpi-duracao">—</div></div>
+    <div class="card"><div class="card-titulo">Melhor expectativa</div>
+      <div class="kpi-valor" id="kpi-expectativa">—</div>
+      <div class="kpi-sub">em múltiplos de risco (R)</div></div>
+  </div>
+
+  <div class="botoes">
+    <button class="btn btn-primario" id="btn-scan">Varrer mercado</button>
+    <button class="btn" id="btn-scan-rapido">Varredura rápida (sem backtest)</button>
+  </div>
+
+  <details class="ajuda">
+    <summary>Como ler os graus e por que tão poucos sinais passam</summary>
+    <ul>
+      <li><strong>Grade A</strong> — confluência técnica alta <em>e</em> a
+        estratégia tem histórico medido positivo naquele par e direção.</li>
+      <li><strong>Grade B</strong> — confluência boa, estatística aceitável.
+        Operável.</li>
+      <li><strong>Grade C</strong> — técnica interessante, mas a amostra
+        histórica é pequena ou o desempenho medido não passou nos mínimos.
+        O motor <em>não</em> envia ordem. Fica só para acompanhamento.</li>
+      <li><strong>Rejeitado</strong> — não passou no score mínimo, ou reprovou
+        em filtro duro (volatilidade extrema, liquidez baixa, R:R ruim).</li>
+    </ul>
+    <p>Poucos sinais é o comportamento correto. Um sistema que aponta
+      oportunidade em 20 pares ao mesmo tempo está medindo ruído.</p>
+  </details>
+
+  <div class="secao-titulo">Sinais operáveis <span class="contagem" id="cont-operaveis">0</span></div>
+  <div class="grid grid-sinais" id="lista-operaveis"><div class="vazio">Clique em &ldquo;Varrer mercado&rdquo;.</div></div>
+
+  <div class="secao-titulo">Em observação — não operados automaticamente <span class="contagem" id="cont-observacao">0</span></div>
+  <div class="grid grid-sinais" id="lista-observacao"><div class="vazio">—</div></div>
+</section>
+
+<!-- ============================================================= MATRIZ -->
+<section class="aba" id="aba-matriz">
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-titulo">Panorama de todas as criptomoedas do universo</div>
+    <div class="dim" style="font-size:12.5px">
+      Cada linha mostra o estado atual do par e o score de confluência para os
+      dois lados. Score alto em <em>um</em> lado com regime contrário é motivo
+      para desconfiar, não para entrar.
+    </div>
+  </div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Par</th><th>Preço</th><th>Regime</th><th>RSI</th><th>ADX</th>
+        <th>ATR %</th><th>Vol 24h</th><th>Funding</th>
+        <th>Score long</th><th>Score short</th><th>Melhor</th>
+      </tr></thead>
+      <tbody id="tbody-matriz">
+        <tr><td colspan="11" class="vazio">Faça uma varredura na primeira aba.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================== RENDA -->
+<section class="aba" id="aba-renda">
+  <div class="aviso" id="aviso-fii">
+    <strong>Fonte dos dados.</strong> <span id="fii-fonte-texto">carregando…</span>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-titulo">Simulador de carteira de renda</div>
+    <div class="form-grid">
+      <div><label for="fii-capital">Capital a aplicar (R$)</label>
+        <input id="fii-capital" type="number" value="50000" min="100" step="100"></div>
+      <div><label for="fii-maxfundo">Máximo por fundo (%)</label>
+        <input id="fii-maxfundo" type="number" value="20" min="5" max="100" step="1"></div>
+      <div><label for="fii-minscore">Score mínimo</label>
+        <input id="fii-minscore" type="number" value="62" min="0" max="100" step="1"></div>
+      <div><label for="fii-maxfundos">Quantidade de fundos</label>
+        <input id="fii-maxfundos" type="number" value="8" min="1" max="30" step="1"></div>
+    </div>
+    <div class="botoes">
+      <button class="btn btn-primario" id="btn-carteira">Montar carteira</button>
+      <button class="btn" id="btn-fiis">Recarregar ranking</button>
+    </div>
+    <div id="resultado-carteira"></div>
+  </div>
+
+  <div class="secao-titulo">Ranking de FIIs <span class="contagem" id="cont-fiis">0</span></div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Segmento</th><th>Score</th><th>Classificação</th>
+        <th>Preço</th><th>DY 12m</th><th>P/VP</th><th>Vacância</th>
+        <th>Liquidez/dia</th><th>Renda /R$1k</th><th>Alertas</th>
+      </tr></thead>
+      <tbody id="tbody-fiis"><tr><td colspan="11" class="carregando">carregando…</td></tr></tbody>
+    </table>
+  </div>
+  <div id="detalhe-fii"></div>
+</section>
+
+<!-- =========================================================== OPERAÇÃO -->
+<section class="aba" id="aba-operacao">
+  <div class="aviso aviso-critico">
+    <strong>Sobre &ldquo;deixar logado&rdquo;.</strong>
+    Automação na Bitget funciona com <em>chave de API</em>, não com a senha da
+    sua conta — e este sistema nunca pede essa senha. Crie a chave em
+    <code>Bitget → API Management</code> com permissão de <strong>leitura</strong> e
+    <strong>trade em futuros</strong>, e deixe <strong>saque e transferência
+    desabilitados</strong>. Assim, no pior cenário, quem tiver a chave pode
+    operar — mas não pode tirar o dinheiro da sua conta.
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
+    <div class="card">
+      <div class="card-titulo">1. Conectar chave de API</div>
+      <div class="form-grid" style="grid-template-columns:1fr">
+        <div><label for="bg-key">API Key</label><input id="bg-key" class="mono" autocomplete="off"></div>
+        <div><label for="bg-secret">API Secret</label><input id="bg-secret" type="password" autocomplete="off"></div>
+        <div><label for="bg-pass">Passphrase da API</label><input id="bg-pass" type="password" autocomplete="off"></div>
+        <div><label for="bg-master">Senha mestra (cifra a chave neste computador)</label>
+          <input id="bg-master" type="password" autocomplete="off"></div>
+      </div>
+      <div class="botoes">
+        <button class="btn btn-primario" id="btn-conectar">Conectar e salvar</button>
+        <button class="btn" id="btn-destravar">Destravar chave salva</button>
+        <button class="btn btn-perigo" id="btn-apagar-cred">Apagar chave</button>
+      </div>
+      <div class="msg" id="msg-bitget"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-titulo">2. Motor autônomo</div>
+      <div class="dim" style="font-size:12.5px;margin-bottom:10px">
+        O motor começa sempre em <strong>simulação</strong>. Para enviar ordens
+        reais é preciso armar explicitamente, digitando a frase de confirmação.
+      </div>
+      <div class="botoes">
+        <button class="btn btn-primario" id="btn-motor-iniciar">Iniciar motor</button>
+        <button class="btn" id="btn-motor-parar">Parar</button>
+        <button class="btn" id="btn-motor-ciclo">Rodar 1 ciclo</button>
+      </div>
+      <div style="margin-top:14px">
+        <label for="confirma-live">Frase de confirmação para modo real</label>
+        <input id="confirma-live" placeholder="digite a frase exibida abaixo" autocomplete="off">
+        <div class="faint mono" style="font-size:11px;margin-top:4px" id="frase-live">—</div>
+      </div>
+      <div class="botoes">
+        <button class="btn btn-perigo" id="btn-armar">Armar modo real</button>
+        <button class="btn" id="btn-desarmar">Desarmar</button>
+      </div>
+      <div class="msg" id="msg-motor"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-titulo">3. Risco e emergência</div>
+      <div id="painel-risco"></div>
+      <div class="botoes">
+        <button class="btn btn-perigo" id="btn-fechar-tudo">Fechar todas as posições</button>
+        <button class="btn" id="btn-rearmar">Rearmar kill switch</button>
+      </div>
+      <div class="msg" id="msg-risco"></div>
+    </div>
+  </div>
+
+  <div class="secao-titulo">Posições abertas <span class="contagem" id="cont-posicoes">0</span></div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Par</th><th>Lado</th><th>Tamanho</th><th>Entrada</th><th>Stop</th>
+        <th>Alvos</th><th>Notional</th><th>Risco</th><th>Alvos batidos</th>
+        <th>Modo</th><th></th>
+      </tr></thead>
+      <tbody id="tbody-posicoes"><tr><td colspan="11" class="vazio">nenhuma posição aberta</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========================================================== HISTÓRICO -->
+<section class="aba" id="aba-historico">
+  <div class="grid grid-kpi">
+    <div class="card"><div class="card-titulo">Operações realizadas</div>
+      <div class="kpi-valor" id="h-trades">—</div></div>
+    <div class="card"><div class="card-titulo">Taxa de acerto real</div>
+      <div class="kpi-valor" id="h-winrate">—</div>
+      <div class="kpi-sub">medida, não estimada</div></div>
+    <div class="card"><div class="card-titulo">Resultado líquido</div>
+      <div class="kpi-valor" id="h-pnl">—</div>
+      <div class="kpi-sub" id="h-taxas">—</div></div>
+    <div class="card"><div class="card-titulo">Profit factor</div>
+      <div class="kpi-valor" id="h-pf">—</div>
+      <div class="kpi-sub" id="h-exp">—</div></div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="card-titulo">Curva de capital</div>
+    <svg class="sparkline" id="svg-equity" viewBox="0 0 800 52" preserveAspectRatio="none"></svg>
+  </div>
+
+  <div class="secao-titulo">Operações</div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Par</th><th>Lado</th><th>Entrada</th><th>Saída</th><th>PnL US$</th>
+        <th>PnL R</th><th>Motivo</th><th>Taxas</th><th>Fechado em</th><th>Modo</th>
+      </tr></thead>
+      <tbody id="tbody-trades"><tr><td colspan="10" class="vazio">nenhuma operação registrada</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="secao-titulo">Registro de auditoria</div>
+  <div class="card" id="lista-eventos"><div class="vazio">—</div></div>
+</section>
+
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
