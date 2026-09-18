@@ -24,12 +24,12 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from ..analysis.screener import ResultadoScan, Screener
 from ..config import Settings
-from ..models import Side, Signal, SignalGrade
+from ..models import Signal, SignalGrade
 from ..risk.manager import RiskManager
 from ..store import Store
 from .executor import Executor

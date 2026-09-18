@@ -22,20 +22,39 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .agents import ChiefInvestmentEngine
 from .analysis.screener import Screener
+from .assets import (
+    CandidatoComparacao, CenarioMacro, Indexador, PerfilInvestidor,
+    TipoRendaFixa, Titulo, analisar_acao, analisar_etf, comparar,
+    comparar_titulos,
+)
 from .backtest.engine import rodar_backtest
+from .data import AssetClass, DataKind, registry_padrao
+from .ops import monitor_padrao
+from .orquestrador import Orquestrador
+from .portfolio import (
+    CENARIOS_PADRAO, analisar_diversificacao, matriz_correlacao,
+    rodar_stress_test,
+)
+from .reporting import BlocoDesempenho, CentralDeAlertas, Journal
+from .risk import RiskEngine
+from .strategies import (
+    CriteriosPromocao, Fase, StrategyRegistry, )
+from .strategies.pipeline import rodar_pipeline_completo
+from .validation import comparar_modos, monte_carlo
 from .config import Settings
 from .datahub import DataHub
 from .exchanges import (
     ApiCredentials, BitgetClient, CredentialError, ExchangeError, Keystore,
     SyntheticProvider, credenciais_do_ambiente,
 )
-from .models import FiiOpportunity, Side
+from .models import Side
 from .passive import carteira_sugerida, provider_padrao, ranquear
 from .risk import RiskManager
 from .store import Store
@@ -81,6 +100,95 @@ class FecharPosicao(BaseModel):
     fracao: float = Field(default=1.0, gt=0, le=1.0)
 
 
+class RetomarOperacao(BaseModel):
+    confirmacao: str
+
+
+class AnalisarAcao(BaseModel):
+    ticker: str
+    fundamentos: dict[str, Any] | None = None
+
+
+class AnalisarEtf(BaseModel):
+    ticker: str
+    dados: dict[str, Any] | None = None
+
+
+class TituloRF(BaseModel):
+    nome: str
+    tipo: str
+    indexador: str
+    taxa: float
+    prazo_dias: int = Field(gt=0)
+    emissor: str = ""
+    risco_credito: int = Field(default=3, ge=1, le=5)
+    liquidez_diaria: bool = False
+    marcacao_a_mercado: bool = True
+
+
+class CompararRendaFixa(BaseModel):
+    titulos: list[TituloRF]
+    cdi_aa: float | None = None
+    selic_aa: float | None = None
+    ipca_aa: float | None = None
+    valor_aplicado: float = Field(default=10_000.0, gt=0)
+
+
+class CandidatoRequest(BaseModel):
+    identificador: str
+    classe: str
+    retorno_nominal_aa: float | None = None
+    incerteza_retorno: float | None = None
+    volatilidade_aa: float | None = None
+    drawdown_plausivel_pct: float | None = None
+    # FRAÇÃO, não percentual: 0.15 para 15%. Aceitar 15.0 aqui produziria
+    # retorno líquido negativo silenciosamente (`retorno × (1 − 15)`), que é
+    # pior do que recusar a requisição.
+    aliquota_ir: float = Field(default=0.0, ge=0.0, le=1.0,
+                               description="fração (0.15 = 15%), não %")
+    isento_ir: bool = False
+    liquidez_dias: int | None = None
+    horizonte_minimo_meses: int | None = None
+    risco_credito: int | None = None
+    garantia: str = ""
+
+
+class CompararClasses(BaseModel):
+    candidatos: list[CandidatoRequest]
+    inflacao_aa: float | None = None
+    horizonte_meses: int = Field(default=36, gt=0)
+    tolerancia_drawdown_pct: float = Field(default=15.0, gt=0)
+    necessidade_liquidez_dias: int = Field(default=30, ge=0)
+    objetivo: str = "crescimento"
+
+
+class RegistrarEstatistica(BaseModel):
+    symbol: str
+    side: str = Field(pattern="^(long|short)$")
+    retornos_r: list[float] = Field(min_length=1)
+
+
+class ValidarEstrategia(BaseModel):
+    strategy_id: str = "confluencia_tendencia"
+    symbol: str = "BTCUSDT"
+    timeframe: str = "1H"
+    lado: str = Field(default="long", pattern="^(long|short)$")
+    barras: int = Field(default=6000, ge=1000, le=20000)
+    n_ciclos: int = Field(default=4, ge=2, le=10)
+    score_minimo: float = 66.0
+
+
+class MonteCarloRequest(BaseModel):
+    retornos_r: list[float] = Field(min_length=1)
+    n_simulacoes: int = Field(default=3000, ge=100, le=20000)
+    risco_por_trade_frac: float = Field(default=0.005, gt=0, lt=1)
+    modo: str = Field(default="blocos", pattern="^(iid|blocos)$")
+
+
+class StressRequest(BaseModel):
+    capital: float = Field(gt=0)
+
+
 # ----------------------------------------------------------------- aplicação
 class AppState:
     """Estado compartilhado do processo — montado uma vez no boot."""
@@ -112,12 +220,39 @@ class AppState:
         self.hub = DataHub(self.provider)
         self.screener = Screener(self.hub, self.settings)
 
+        # ------------------------------------------------- camadas novas
+        self.registry = registry_padrao(
+            sintetico=usar_sintetico,
+            bitget_ok=self._checar_bitget,
+            brapi_ok=lambda: bool(os.environ.get("BRAPI_TOKEN", "").strip()))
+        self.registry.revalidar()
+
         self.risk = RiskManager(self.settings.risk,
                                 self.settings.exec.capital_inicial_usd)
+        self.risk_engine = RiskEngine(
+            self.settings.risk, self.settings.exec.capital_inicial_usd,
+            manager=self.risk)
+        self.chief = ChiefInvestmentEngine()
+        self.alertas = CentralDeAlertas()
+        self.journal = Journal()
+        self.strategies = StrategyRegistry()
+        self.monitor = monitor_padrao(
+            checar_dados=self._checar_dados,
+            checar_exchange=self._checar_exchange,
+            checar_banco=self._checar_banco,
+            checar_risco=lambda: not self.risk_engine.halted,
+            checar_noticias=lambda: False)
         self.executor = Executor(self.settings.exec, backend=self.bitget,
                                  modo="paper")
         self.engine = TradingEngine(self.settings, self.screener, self.executor,
                                     self.risk, self.store)
+        self.orquestrador = Orquestrador(
+            self.settings, self.hub, self.risk_engine,
+            registry=self.registry, chief=self.chief, monitor=self.monitor,
+            alertas=self.alertas, journal=self.journal,
+            relogio=self._relogio_dados)
+        self.ultimo_ciclo = None
+
         self.fii_provider = provider_padrao(
             self.settings.data_dir,
             token_brapi=os.environ.get("BRAPI_TOKEN", ""),
@@ -125,6 +260,50 @@ class AppState:
 
         if self.credenciais is not None:
             self.conectar(self.credenciais)
+
+    # ------------------------------------------------- checagens de saúde
+    def _relogio_dados(self) -> int:
+        """Instante de referência para medir a IDADE dos dados.
+
+        Com dados reais é o relógio da máquina. Em modo sintético é o instante
+        do próprio gerador da série: medir uma série simulada contra o relógio
+        real reprovaria por "dados desatualizados" um histórico íntegro, e o
+        painel inteiro cairia em `dados_insuficientes` sem que nada estivesse
+        de fato errado.
+        """
+        if self.usar_sintetico:
+            agora = getattr(self.hub.provider, "agora_ms", 0)
+            if agora:
+                return int(agora)
+        return int(time.time() * 1000)
+
+    def _checar_dados(self) -> bool:
+        try:
+            velas = self.hub.candles(self.settings.universo[0], "1H", limit=5)
+            return bool(velas)
+        except Exception:                               # noqa: BLE001
+            return False
+
+    def _checar_bitget(self) -> bool:
+        if self.usar_sintetico or self.bitget is None:
+            return False
+        try:
+            return self.bitget.server_time_ms() > 0
+        except Exception:                               # noqa: BLE001
+            return False
+
+    def _checar_exchange(self) -> bool:
+        # Em modo simulado a exchange não é crítica: o simulador substitui.
+        if self.usar_sintetico:
+            return True
+        return self._checar_bitget()
+
+    def _checar_banco(self) -> bool:
+        try:
+            self.store.get_estado("__healthcheck__", None)
+            return True
+        except Exception:                               # noqa: BLE001
+            return False
 
     def _montar_provider(self) -> Any:
         if self.usar_sintetico:
@@ -439,6 +618,330 @@ def criar_app(state: AppState | None = None) -> FastAPI:
         st.risk.liberar_kill_switch()
         st.store.registrar_evento("ALERTA", "api", "kill switch rearmado manualmente")
         return {"mensagem": "kill switch rearmado", "risco": st.risk.estado.to_dict()}
+
+
+    def _candles_ou_404(symbol: str, *, limit: int) -> list[Any]:
+        """Par desconhecido é 404, não 500.
+
+        Um erro 500 aqui faria o painel exibir "erro interno" para o que é
+        apenas um símbolo digitado errado — e esconderia falhas reais do
+        provedor no mesmo código de status.
+        """
+        try:
+            return st.hub.candles(symbol.upper(), "1H", limit=limit)
+        except (ExchangeError, ValueError) as exc:
+            raise HTTPException(404, f"{symbol.upper()}: {exc}") from exc
+
+    # ================================================= ciclo completo
+    @app.get("/api/ciclo")
+    def ciclo_analise(symbols: str = Query(default=""),
+                      com_portfolio: bool = Query(default=True)
+                      ) -> dict[str, Any]:
+        """Ciclo completo: qualidade → regime → anomalias → agentes →
+        consenso → Risk Engine. Cada parada registra o motivo."""
+        alvos = [x.strip().upper() for x in symbols.split(",") if x.strip()] \
+            or None
+        posicoes = st.executor.posicoes() if com_portfolio else []
+        resultado = st.orquestrador.ciclo(alvos, posicoes=posicoes)
+        st.ultimo_ciclo = resultado
+        payload = resultado.to_dict()
+        payload["aviso"] = AVISO_PADRAO
+        return payload
+
+    @app.get("/api/analise-completa/{symbol}")
+    def analise_completa(symbol: str) -> dict[str, Any]:
+        a = st.orquestrador.analisar(symbol.upper(),
+                                     posicoes=st.executor.posicoes())
+        if a.erro and a.etapa_final in ("normalizacao", "coleta"):
+            raise HTTPException(404, a.erro)
+        return {"analise": a.to_dict(), "aviso": AVISO_PADRAO}
+
+    @app.post("/api/estatistica", dependencies=protegido)
+    def registrar_estatistica(req: RegistrarEstatistica) -> dict[str, Any]:
+        """Alimenta a estatística medida de um par/direção.
+
+        Sem ela o agente quantitativo se abstém e nada pode ser
+        'validado pelo modelo' — que é o comportamento correto."""
+        ev = st.orquestrador.registrar_estatistica(
+            req.symbol.upper(), Side(req.side), req.retornos_r)
+        return {"symbol": req.symbol.upper(), "side": req.side,
+                "ev": ev.to_dict()}
+
+    @app.get("/api/relatorio-diario")
+    def relatorio_diario() -> dict[str, Any]:
+        ciclo = st.ultimo_ciclo
+        if ciclo is None:
+            ciclo = st.orquestrador.ciclo(posicoes=st.executor.posicoes())
+            st.ultimo_ciclo = ciclo
+        resumo_paper = st.store.resumo_trades("paper")
+        resumo_live = st.store.resumo_trades("live")
+        rel = st.orquestrador.relatorio_diario(
+            ciclo,
+            desempenho=[
+                BlocoDesempenho(
+                    "paper", resumo_paper["trades"], resumo_paper["win_rate"],
+                    resumo_paper["pnl_usd"], resumo_paper["expectancy_r"],
+                    resumo_paper["profit_factor"], resumo_paper["taxas_usd"],
+                    st.risk.estado.drawdown_pct,
+                    st.risk.estado.capital_atual),
+                BlocoDesempenho(
+                    "live", resumo_live["trades"], resumo_live["win_rate"],
+                    resumo_live["pnl_usd"], resumo_live["expectancy_r"],
+                    resumo_live["profit_factor"], resumo_live["taxas_usd"]),
+            ],
+            estrategias_por_fase=st.strategies.por_fase(),
+            modo_de_dados="sintetico" if st.usar_sintetico else "bitget")
+        return {"relatorio": rel.to_dict(), "texto": rel.para_texto()}
+
+    # ================================================ dados e cobertura
+    @app.get("/api/dados/cobertura")
+    def cobertura_dados() -> dict[str, Any]:
+        """O que o sistema sabe e o que NÃO sabe, declarado."""
+        st.registry.revalidar()
+        return {
+            "resumo": st.registry.resumo(),
+            "provedores": [p.to_dict() for p in st.registry.provedores()],
+            "matriz": st.registry.matriz_cobertura(),
+            "observacao": "combinação sem provedor conectado devolve FONTE "
+                          "NÃO CONFIGURADA; a interface nunca preenche o "
+                          "espaço com número plausível",
+        }
+
+    @app.get("/api/saude")
+    def saude() -> dict[str, Any]:
+        return st.monitor.checar_tudo().to_dict()
+
+    @app.get("/api/regime/{symbol}")
+    def regime(symbol: str) -> dict[str, Any]:
+        from .ops import detectar_regime
+        velas = _candles_ou_404(symbol, limit=500)
+        if len(velas) < 250:
+            raise HTTPException(422, f"histórico insuficiente para "
+                                     f"{symbol.upper()}")
+        return detectar_regime(velas).to_dict()
+
+    @app.get("/api/anomalias/{symbol}")
+    def anomalias(symbol: str) -> dict[str, Any]:
+        from .ops import RelatorioAnomalias, detectar_anomalias
+        velas = _candles_ou_404(symbol, limit=200)
+        rel = RelatorioAnomalias(symbol.upper(),
+                                 detectar_anomalias(symbol.upper(), velas))
+        return rel.to_dict()
+
+    # ==================================================== validação
+    @app.post("/api/validacao/estrategia", dependencies=protegido)
+    def validar_estrategia(req: ValidarEstrategia) -> dict[str, Any]:
+        """Roda walk-forward + Monte Carlo + overfitting e aplica os gates."""
+        try:
+            velas = st.hub.historico(req.symbol.upper(), req.timeframe,
+                                     barras=req.barras)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if len(velas) < 1000:
+            raise HTTPException(
+                422, f"histórico insuficiente: {len(velas)} candles")
+
+        lado = Side(req.lado)
+
+        def runner(janela, params):
+            r = rodar_backtest(
+                req.symbol.upper(), req.timeframe, janela,
+                st.settings.signal, st.settings.exec, side_filtro=lado,
+                score_minimo=params.get("score_minimo"))
+            return r.stats, r.trades
+
+        params = {"score_minimo": req.score_minimo,
+                  "atr_mult_stop": st.settings.signal.atr_mult_stop}
+        rel = rodar_pipeline_completo(
+            st.strategies, req.strategy_id, params, velas, runner,
+            timeframe=req.timeframe, n_ciclos=req.n_ciclos,
+            capital=st.settings.exec.capital_inicial_usd,
+            risco_por_trade_frac=st.settings.risk.risco_por_trade_pct / 100.0)
+
+        # A estatística medida alimenta o agente quantitativo.
+        if rel.walk_forward and rel.walk_forward.trades_oos:
+            st.orquestrador.registrar_estatistica(
+                req.symbol.upper(), lado,
+                [t.pnl_r for t in rel.walk_forward.trades_oos])
+
+        st.store.registrar_evento(
+            "INFO", "validacao",
+            f"validação de {rel.chave_estrategia}: fase {rel.fase_final}",
+            {"promovida": rel.promovida,
+             "gate": rel.gate.to_dict() if rel.gate else None})
+        return rel.to_dict()
+
+    @app.post("/api/validacao/monte-carlo")
+    def validacao_monte_carlo(req: MonteCarloRequest) -> dict[str, Any]:
+        return monte_carlo(
+            req.retornos_r, n_simulacoes=req.n_simulacoes,
+            risco_por_trade_frac=req.risco_por_trade_frac,
+            modo=req.modo).to_dict()
+
+    @app.post("/api/validacao/comparar-modos")
+    def validacao_comparar(req: MonteCarloRequest) -> dict[str, Any]:
+        """IID contra blocos: mostra o quanto assumir independência engana."""
+        return comparar_modos(
+            req.retornos_r, n_simulacoes=req.n_simulacoes,
+            risco_por_trade_frac=req.risco_por_trade_frac)
+
+    # ==================================================== estratégias
+    @app.get("/api/estrategias")
+    def estrategias() -> dict[str, Any]:
+        return st.strategies.to_dict()
+
+    @app.get("/api/estrategias/criterios")
+    def criterios_promocao() -> dict[str, Any]:
+        return {"criterios": CriteriosPromocao().to_dict(),
+                "fases": [f.value for f in Fase],
+                "observacao": "as fases que dependem de execução ao vivo "
+                              "(paper, shadow, assistido) NÃO podem ser "
+                              "vencidas por backtest"}
+
+    # ====================================================== portfólio
+    @app.get("/api/portfolio")
+    def portfolio() -> dict[str, Any]:
+        posicoes = st.executor.posicoes()
+        if not posicoes:
+            return {"n_posicoes": 0,
+                    "mensagem": "nenhuma posição aberta",
+                    "cenarios_disponiveis": [c.nome
+                                             for c in CENARIOS_PADRAO]}
+        series = {p.symbol: st.hub.candles(p.symbol, "1H", limit=500)
+                  for p in posicoes}
+        matriz = matriz_correlacao(series, janela=400)
+        return {
+            "diversificacao": analisar_diversificacao(posicoes,
+                                                      matriz).to_dict(),
+            "correlacao": matriz.to_dict(),
+        }
+
+    @app.post("/api/portfolio/stress")
+    def portfolio_stress(req: StressRequest) -> dict[str, Any]:
+        posicoes = st.executor.posicoes()
+        if not posicoes:
+            raise HTTPException(422, "nenhuma posição aberta para estressar")
+        return rodar_stress_test(posicoes, req.capital).to_dict()
+
+    # ===================================================== multiativos
+    @app.post("/api/ativos/acao")
+    def ativo_acao(req: AnalisarAcao) -> dict[str, Any]:
+        cov = st.registry.cobertura(AssetClass.ACAO, DataKind.FUNDAMENTOS)
+        r = analisar_acao(req.ticker, req.fundamentos,
+                          fonte=", ".join(cov.provedores) or cov.mensagem)
+        return {"analise": r.to_dict(), "cobertura": cov.to_dict()}
+
+    @app.post("/api/ativos/etf")
+    def ativo_etf(req: AnalisarEtf) -> dict[str, Any]:
+        return {"analise": analisar_etf(req.ticker, req.dados).to_dict()}
+
+    @app.post("/api/ativos/renda-fixa")
+    def ativo_renda_fixa(req: CompararRendaFixa) -> dict[str, Any]:
+        try:
+            titulos = [
+                Titulo(nome=t.nome, tipo=TipoRendaFixa(t.tipo),
+                       indexador=Indexador(t.indexador), taxa=t.taxa,
+                       prazo_dias=t.prazo_dias, emissor=t.emissor,
+                       risco_credito=t.risco_credito,
+                       liquidez_diaria=t.liquidez_diaria,
+                       marcacao_a_mercado=t.marcacao_a_mercado)
+                for t in req.titulos
+            ]
+        except ValueError as exc:
+            raise HTTPException(422, {
+                "erro": f"tipo ou indexador inválido: {exc}",
+                "tipos_validos": [t.value for t in TipoRendaFixa],
+                "indexadores_validos": [i.value for i in Indexador],
+            })
+        macro = CenarioMacro(cdi_aa=req.cdi_aa, selic_aa=req.selic_aa,
+                             ipca_aa=req.ipca_aa)
+        return comparar_titulos(titulos, macro,
+                                valor_aplicado=req.valor_aplicado)
+
+    @app.post("/api/ativos/comparar")
+    def ativos_comparar(req: CompararClasses) -> dict[str, Any]:
+        try:
+            cands = [
+                CandidatoComparacao(
+                    identificador=c.identificador,
+                    classe=AssetClass(c.classe),
+                    retorno_nominal_aa=c.retorno_nominal_aa,
+                    incerteza_retorno=c.incerteza_retorno,
+                    volatilidade_aa=c.volatilidade_aa,
+                    drawdown_plausivel_pct=c.drawdown_plausivel_pct,
+                    aliquota_ir=c.aliquota_ir, isento_ir=c.isento_ir,
+                    liquidez_dias=c.liquidez_dias,
+                    horizonte_minimo_meses=c.horizonte_minimo_meses,
+                    risco_credito=c.risco_credito, garantia=c.garantia)
+                for c in req.candidatos
+            ]
+        except ValueError as exc:
+            raise HTTPException(422, {
+                "erro": f"classe de ativo inválida: {exc}",
+                "classes_validas": [c.value for c in AssetClass
+                                    if c is not AssetClass.DESCONHECIDO],
+            })
+        perfil = PerfilInvestidor(
+            horizonte_meses=req.horizonte_meses,
+            tolerancia_drawdown_pct=req.tolerancia_drawdown_pct,
+            necessidade_liquidez_dias=req.necessidade_liquidez_dias,
+            objetivo=req.objetivo)
+        return comparar(cands, inflacao_aa=req.inflacao_aa,
+                        perfil=perfil).to_dict()
+
+    # ========================================== journal e alertas
+    @app.get("/api/journal")
+    def journal_listar(limite: int = Query(default=50, ge=1, le=500)
+                       ) -> dict[str, Any]:
+        return {
+            "entradas": [e.to_dict()
+                         for e in st.journal.listar()[:limite]],
+            "resumo": st.journal.resumo_por_quadrante(),
+        }
+
+    @app.get("/api/alertas")
+    def alertas(limite: int = Query(default=50, ge=1, le=200),
+                nivel: str = Query(default="")) -> dict[str, Any]:
+        from .reporting import NivelAlerta
+        nv = NivelAlerta(nivel) if nivel else None
+        return {
+            "alertas": [a.to_dict()
+                        for a in st.alertas.listar(nivel=nv, limite=limite)],
+            "resumo": st.alertas.resumo(),
+        }
+
+    # ============================================== risco expandido
+    @app.get("/api/risco")
+    def risco_status() -> dict[str, Any]:
+        return st.risk_engine.status()
+
+    @app.post("/api/risco/retomar", dependencies=protegido)
+    def risco_retomar(req: RetomarOperacao) -> dict[str, Any]:
+        ok, mensagem = st.risk_engine.retomar(req.confirmacao)
+        if not ok:
+            raise HTTPException(400, mensagem)
+        st.store.registrar_evento("ALERTA", "risco",
+                                  "operação retomada após halt")
+        return {"mensagem": mensagem, "status": st.risk_engine.status()}
+
+    @app.post("/api/risco/halt", dependencies=protegido)
+    def risco_halt() -> dict[str, Any]:
+        st.risk_engine.halt("halt manual pelo painel")
+        st.store.registrar_evento("ALERTA", "risco", "TRADING HALTED manual")
+        return {"mensagem": "TRADING HALTED", "status": st.risk_engine.status()}
+
+    @app.get("/api/liquidacao")
+    def liquidacao(entry: float = Query(gt=0), stop: float = Query(gt=0),
+                   leverage: float = Query(ge=1), lado: str = Query(
+                       default="long", pattern="^(long|short)$"),
+                   atr_pct: float = Query(default=0.0, ge=0)
+                   ) -> dict[str, Any]:
+        """Distância até a liquidação, com as duas checagens."""
+        from .risk import analisar as analisar_liq
+        a = analisar_liq(entry, stop, Side(lado), leverage,
+                         notional_usd=1000.0,
+                         atr_pct=atr_pct if atr_pct > 0 else None)
+        return a.to_dict()
 
     # ------------------------------------------------------------------ painel
     web_dir = Path(__file__).parent / "web"

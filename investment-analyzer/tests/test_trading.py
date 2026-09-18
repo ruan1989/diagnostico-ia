@@ -1,7 +1,7 @@
 """Executor e motor autônomo, incluindo as travas do modo real."""
 import pytest
 
-from investai.config import ExecutionConfig, Settings
+from investai.config import ExecutionConfig
 from investai.models import Position, Regime, Side, Signal, SignalGrade
 from investai.risk.manager import DecisaoRisco
 from investai.trading import (

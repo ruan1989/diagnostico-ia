@@ -8,3 +8,12 @@ __all__ = [
     "CONFIRMACAO_LIVE", "EstadoMotor", "Executor", "ResultadoExecucao",
     "TradingEngine", "arredondar_preco", "arredondar_size", "gerar_client_oid",
 ]
+from .paper import (
+    ConfigSimulador, LivroSintetico, Ordem, SimuladorExecucao, StatusOrdem,
+    TipoOrdem,
+)
+
+__all__ += [
+    "ConfigSimulador", "LivroSintetico", "Ordem", "SimuladorExecucao",
+    "StatusOrdem", "TipoOrdem",
+]

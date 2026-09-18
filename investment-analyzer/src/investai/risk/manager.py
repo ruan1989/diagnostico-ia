@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Sequence
 
 from ..config import RiskConfig
-from ..models import Position, Side, Signal, Trade
+from ..models import Position, Signal, Trade
 
 
 @dataclass(slots=True)

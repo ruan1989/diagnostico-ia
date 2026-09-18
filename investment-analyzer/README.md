@@ -60,6 +60,16 @@ Este foi construído para ser o primeiro.
 | **Execução autônoma** | Modo papel e modo real na Bitget, com stop anexado na exchange e ordens idempotentes |
 | **Renda passiva (FII)** | Ranking de FIIs com penalização de armadilha de dividend yield, simulador de carteira com teto por fundo e por segmento |
 | **Auditoria** | Todo sinal, ordem, bloqueio de risco e operação gravados em SQLite |
+| **Camada de dados com procedência** | Normalização de símbolo, avaliação de qualidade candle a candle, validação multifonte, detector de série congelada e registro do que **não** tem fonte |
+| **Validação estatística** | Walk-forward ancorado/deslizante com deduplicação de trade, Monte Carlo IID vs. blocos, 5 sinais de overfitting, EV com intervalo de confiança |
+| **Risk Engine com veto absoluto** | Camada separada que pode derrubar qualquer decisão; proteção de liquidação em duas checagens; proibições estruturais sem flag de configuração |
+| **Pipeline de promoção em 7 fases** | Rascunho → backtest → out-of-sample → paper → shadow → assistido → real limitado, com gate auditado a cada passo |
+| **Paper trading realista** | Livro sintético, fila de ordem limitada, latência, rejeição e slippage — tocar o preço não é ser executado |
+| **Arquitetura multiagente** | 7 especialistas com consenso ponderado, distinção entre abstenção e voto neutro, e "NÃO OPERAR" como resposta válida |
+| **Portfólio e stress** | Correlação, dependência de cauda por coexcedência, apostas independentes efetivas e cenários históricos |
+| **Multiativos** | Ações, ETFs, renda fixa e comparação entre classes por retorno real líquido ajustado a risco |
+| **Operação** | Detector de regime, detector de anomalias, shadow mode, health monitor, kill switch e halt global |
+| **Relatórios** | Journal com quadrantes de processo, central de alertas e relatório diário com as lacunas declaradas |
 
 ---
 
@@ -316,15 +326,74 @@ src/investai/
 ├── backtest/
 │   ├── engine.py        Walk-forward barra a barra
 │   └── metrics.py       Win rate, PF, expectativa, drawdown, Sharpe
-├── risk/manager.py      Dimensionamento e circuit breakers
+├── data/
+│   ├── symbols.py       Normalização de símbolo; mesmo instrumento ≠ mesmo risco
+│   ├── quality.py       Qualidade da série, comparação multifonte, série congelada
+│   └── registry.py      Provedores, cobertura classe × tipo e lacunas declaradas
+├── validation/
+│   ├── stats.py         Wilson, IC de média, EV, Kelly, risco de ruína
+│   ├── walkforward.py   Walk-forward com deduplicação de trade entre janelas
+│   ├── montecarlo.py    Bootstrap IID e em blocos (preserva perda em série)
+│   └── overfit.py       5 sinais de overfitting + análise de sensibilidade
+├── risk/
+│   ├── manager.py       Dimensionamento e circuit breakers
+│   ├── liquidation.py   Distância até a liquidação: folga + âncora em ATR
+│   └── engine.py        Veto absoluto, proibições estruturais, halt global
+├── strategies/
+│   ├── registry.py      Versão, hash de parâmetros, histórico de fase
+│   ├── promotion.py     Critérios e gate por fase, com exigido × medido
+│   └── pipeline.py      Único caminho para mudar a fase de uma estratégia
+├── agents/
+│   ├── base.py          Parecer, postura e peso efetivo
+│   ├── especialistas.py Técnico, quantitativo, risco, macro, fluxo, ...
+│   └── chief.py         Consenso ponderado e decisão final
+├── portfolio/
+│   ├── correlacao.py    Matriz, dependência de cauda, apostas efetivas
+│   └── stress.py        Cenários históricos aplicados às posições abertas
+├── assets/
+│   ├── acoes.py         Análise fundamentalista (exige fonte de fundamentos)
+│   ├── renda_fixa.py    Retorno real líquido, IR por prazo, risco de crédito
+│   ├── etfs.py          Tracking error, custo e composição
+│   └── comparador.py    Régua comum entre classes, com perfil do investidor
+├── ops/
+│   ├── regime.py        Tendência, lateral, volatilidade, incerto
+│   ├── anomalias.py     Z-score robusto (MAD), gap, volume, funding
+│   ├── shadow.py        Decisão registrada sem execução, para medir fidelidade
+│   └── health.py        Componentes críticos e não críticos
+├── reporting/
+│   ├── journal.py       Quadrantes: acerto merecido, sorte, azar, erro cobrado
+│   ├── alertas.py       Central com nível, categoria e deduplicação
+│   └── diario.py        Relatório diário em texto auditável
+├── orquestrador.py      Liga as camadas na ordem correta, etapa por etapa
 ├── trading/
 │   ├── executor.py      Execução em papel e real
+│   ├── paper.py         Simulador com livro, fila, latência e rejeição
 │   └── engine.py        Loop autônomo com travas do modo real
 ├── passive/
 │   ├── fii.py           Score de FII com camada de teto
 │   └── data.py          Snapshot local + atualização de preço
-└── web/                 Painel (HTML/CSS/JS, sem dependências externas)
+└── web/                 Painel de 9 abas (HTML/CSS/JS, sem dependências)
 ```
+
+### O ciclo de análise, etapa por etapa
+
+```
+normalização → coleta → qualidade → regime → anomalias → features
+             → 7 agentes → consenso → Risk Engine (veto) → journal → alertas
+```
+
+Cada etapa pode interromper o fluxo, e **o motivo fica registrado**. Uma
+oportunidade que morre na primeira etapa aparece no relatório com a causa, em
+vez de simplesmente não aparecer. É a diferença entre "o sistema não achou
+nada" e "o sistema não sabe".
+
+### O que o sistema declara não saber
+
+Nenhuma tela preenche um espaço vazio com número plausível. Combinação de
+classe de ativo × tipo de dado sem provedor conectado devolve
+`FONTE NÃO CONFIGURADA`, e a aba *Sistema & dados* mostra a matriz completa
+com a instrução de como conectar cada fonte. Na configuração padrão são **107
+combinações sem fonte** — e isso está na tela, não escondido.
 
 ### A garantia anti-lookahead
 
@@ -395,9 +464,19 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-245 testes cobrindo indicadores, ausência de lookahead, métricas de backtest,
-circuit breakers de risco, idempotência de ordem, cifragem do keystore,
-armadilhas de DY em FII e autenticação da API.
+765 testes cobrindo indicadores, ausência de lookahead, métricas de backtest,
+circuit breakers de risco, veto do Risk Engine, proteção de liquidação,
+deduplicação do walk-forward, detecção de overfitting, consenso multiagente,
+dependência de cauda em portfólio, comparação entre classes de ativo,
+idempotência de ordem, cifragem do keystore, armadilhas de DY em FII,
+autenticação da API e integração ponta a ponta.
+
+Os testes de integração (`tests/test_integracao.py`) verificam o que os testes
+por módulo não pegam: que as travas continuam de pé **quando as camadas são
+montadas juntas**. Entre eles, que nenhuma superfície da API produz as
+expressões proibidas ("lucro garantido", "risco zero", "100% de acerto") sem
+negação explícita, e que o caminho para capital real permanece fechado depois
+de qualquer sequência de validações em histórico.
 
 Os testes rodam offline, com dados sintéticos determinísticos e timestamp fixo —
 não dependem de rede nem de chave de API.
@@ -412,11 +491,22 @@ não dependem de rede nem de chave de API.
 - **O backtest não modela livro de ofertas.** Em par de baixa liquidez ou em
   choque de volatilidade, o slippage real pode ser muito maior que os 0,03%
   assumidos. O filtro de liquidez mínima de US$ 20 milhões/24h existe por isso.
-- **Não modela liquidação forçada.** Com os limites padrão a margem isolada não
-  chega perto disso, mas se você aumentar a alavancagem, esse cenário passa a
-  existir e não está simulado.
+- **A liquidação é calculada, não simulada.** `risk/liquidation.py` mede a
+  distância até o preço de liquidação e veta a operação quando a liquidação
+  ficaria antes do stop ou a menos de 4 ATRs da entrada. O que o backtest
+  ainda não faz é simular o evento de liquidação dentro da série.
 - **Sem análise de notícia ou evento macro.** Anúncio regulatório, quebra de
   exchange ou decisão de juros invalidam qualquer leitura técnica em segundos.
+  O agregador de notícias aparece como `OFFLINE` no health monitor e o agente
+  de notícias se abstém — o peso dele é redistribuído, não presumido favorável.
+- **Paper trading e shadow mode exigem tempo de calendário.** Os gates dessas
+  fases pedem dias corridos e operações executadas ao vivo, justamente para
+  que não sejam vencidos rodando histórico mais rápido. Nenhuma estratégia
+  pode chegar a capital real sem esse tempo passar de verdade.
+- **Ações, ETFs, renda fixa, macro, notícias, liquidações e livro de ofertas
+  não têm conector.** Os analisadores estão implementados e testados, mas
+  respondem `FONTE NÃO CONFIGURADA` até que a fonte seja ligada. Renda fixa e
+  comparação entre classes funcionam com os parâmetros que você informar.
 - **O snapshot de FII não é automático** — ver a seção de renda passiva.
 - **A Bitget devolve no máximo 1000 candles por chamada.** O hub pagina para
   trás, mas o histórico disponível ainda limita o tamanho da amostra em pares

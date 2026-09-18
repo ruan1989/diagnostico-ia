@@ -19,6 +19,27 @@ from ..config import tf_ms
 from ..models import Candle, MarketSnapshot
 from .base import ExchangeError
 
+# Beta de cada ativo em relação ao fator de mercado comum. Cripto não é um
+# conjunto de ativos independentes: os majors se movem quase juntos, e as
+# altcoins amplificam o movimento. Sem essa estrutura, o gerador produziria
+# correlação ~0 entre os pares e o detector de falsa diversificação nunca
+# disparia no modo demonstração — ensinando exatamente o oposto do que
+# acontece numa carteira real.
+BETA_MERCADO = {
+    "BTCUSDT": 1.00, "ETHUSDT": 1.10, "BNBUSDT": 0.85,
+    "SOLUSDT": 1.35, "AVAXUSDT": 1.40, "NEARUSDT": 1.35,
+    "APTUSDT": 1.40, "SUIUSDT": 1.45, "ADAUSDT": 1.15,
+    "DOTUSDT": 1.20, "ATOMUSDT": 1.25, "TONUSDT": 1.05,
+    "ARBUSDT": 1.45, "OPUSDT": 1.45, "MATICUSDT": 1.30,
+    "DOGEUSDT": 1.50, "XRPUSDT": 1.05, "LTCUSDT": 1.00,
+    "LINKUSDT": 1.25, "INJUSDT": 1.50,
+}
+
+# Fração da variância que vem do fator comum. 0,62 produz correlação entre
+# pares na faixa de 0,55 a 0,75, que é a ordem de grandeza observada em
+# cripto fora de eventos idiossincráticos.
+PESO_FATOR_MERCADO = 0.62
+
 PRECO_BASE = {
     "BTCUSDT": 64000.0, "ETHUSDT": 3100.0, "SOLUSDT": 150.0,
     "BNBUSDT": 580.0, "XRPUSDT": 0.52, "ADAUSDT": 0.45,
@@ -49,6 +70,7 @@ class SyntheticProvider:
         self.agora_ms = agora_ms or int(time.time() // 3600 * 3600 * 1000)
         self.vol_anual = vol_anual
         self._cache: dict[tuple[str, str], list[Candle]] = {}
+        self._cache_fator: dict[str, list[float]] = {}
 
     # ------------------------------------------------------------------ API
     def symbols(self) -> list[str]:
@@ -121,6 +143,46 @@ class SyntheticProvider:
         }
 
     # -------------------------------------------------------------- interno
+    def _fator_mercado(self, timeframe: str, n: int) -> list[float]:
+        """Choques do mercado como um todo, compartilhados por todos os pares.
+
+        É a mesma sequência para qualquer símbolo no mesmo timeframe — é isso
+        que cria a correlação.
+        """
+        chave = f"{timeframe}:{n}"
+        if chave not in self._cache_fator:
+            rnd = random.Random(_seed(self.seed, "fator_mercado", timeframe))
+            passo = tf_ms(timeframe)
+            barras_ano = 365 * 24 * 3600 * 1000 / passo
+            vol_barra = self.vol_anual / math.sqrt(barras_ano)
+            choques: list[float] = []
+            regime_restante = 0
+            drift = 0.0
+            estresse = 1.0
+            for _ in range(n):
+                if regime_restante <= 0:
+                    # Sorteia regime. O de "estresse" amplifica o fator comum
+                    # de 3 a 5 vezes: é o que faz a correlação entre ativos
+                    # DISPARAR nas quedas, porque nesses períodos o
+                    # movimento de mercado domina o ruído próprio de cada
+                    # ativo. Sem isso a correlação em cauda sairia MENOR que
+                    # a normal — o inverso do que acontece de verdade, e o
+                    # detector de correlação em cauda nunca teria o que
+                    # detectar no modo demonstração.
+                    if rnd.random() < 0.14:
+                        regime_restante = rnd.randint(10, 35)
+                        estresse = rnd.uniform(3.0, 5.0)
+                        drift = -vol_barra * rnd.uniform(0.35, 0.9)
+                    else:
+                        regime_restante = rnd.randint(40, 160)
+                        estresse = 1.0
+                        drift = (rnd.choice([-1, 1]) * vol_barra
+                                 * rnd.uniform(0.05, 0.22))
+                regime_restante -= 1
+                choques.append(drift + rnd.gauss(0.0, vol_barra * estresse))
+            self._cache_fator[chave] = choques
+        return self._cache_fator[chave]
+
     def _serie(self, symbol: str, timeframe: str, inicio: int,
                passo: int, n: int) -> list[Candle]:
         rnd = random.Random(_seed(self.seed, symbol, timeframe))
@@ -129,6 +191,12 @@ class SyntheticProvider:
 
         barras_ano = 365 * 24 * 3600 * 1000 / passo
         vol_barra = self.vol_anual / math.sqrt(barras_ano)
+
+        fator = self._fator_mercado(timeframe, n)
+        beta = BETA_MERCADO.get(symbol, 1.2)
+        # A variância total é repartida entre fator comum e ruído próprio.
+        peso_fator = math.sqrt(PESO_FATOR_MERCADO)
+        peso_idio = math.sqrt(1.0 - PESO_FATOR_MERCADO)
 
         velas: list[Candle] = []
         drift = 0.0
@@ -158,7 +226,11 @@ class SyntheticProvider:
             # Reversão fraca ao âncora: sem ela, 900 barras de drift levam o
             # preço a valores absurdos e distorcem métricas percentuais.
             reversao = -0.004 * math.log(preco / ancora)
-            ret = drift + reversao + rnd.gauss(0.0, sigma)
+            # Retorno = componente de mercado (compartilhada) + componente
+            # idiossincrática (própria do ativo).
+            comum = beta * fator[i] * peso_fator
+            proprio = rnd.gauss(0.0, sigma) * peso_idio
+            ret = drift * peso_idio + reversao + comum + proprio
             ret = max(min(ret, 0.18), -0.18)   # trava movimentos absurdos
 
             abertura = preco
