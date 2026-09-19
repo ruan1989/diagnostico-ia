@@ -157,8 +157,21 @@ ordem — não tem como movimentar dinheiro. Confere, um a um:
 | funding | o endpoint responde |
 | ticker × candle | duas fontes do mesmo preço não divergem mais de 5% |
 
-Sai com código 1 e diz o que fazer se algo falhar. Aponte para outro endpoint
-(o ambiente de demonstração, por exemplo) com `--base-url`.
+Códigos de saída distintos, porque as causas são distintas:
+
+| Código | Significado | O que investigar |
+|---|---|---|
+| 0 | leitura de mercado conferida | — |
+| 1 | a Bitget respondeu, mas algo está errado | o conector, o par, a conta |
+| 2 | **nenhuma** chamada chegou à Bitget | rede: proxy, firewall, bloqueio por região, DNS |
+
+O código 2 existe para não mandar você caçar defeito no código quando falta
+rota de rede. Nesse caso a saída nomeia as causas prováveis e dá um `curl`
+para confirmar fora do sistema.
+
+`--base-url` aponta para outro endpoint (o ambiente de demonstração, por
+exemplo). `--tentativas 1` corta as re-tentativas: com a rede fora, o
+diagnóstico sai em ~2s em vez de ~40s.
 
 O próprio verificador é testado: `tests/test_conferir_bitget.py` sobe um
 servidor que imita a API v2 e confirma que cada quebra conhecida é apanhada —

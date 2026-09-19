@@ -177,3 +177,56 @@ def test_relogio_dessincronizado_explica_a_consequencia(bitget_falso,
     """Relógio fora do ar é a causa clássica de "assinatura inválida"."""
     _, saida = _conferir(bitget_falso("relogio"), monkeypatch)
     assert "assinatura" in saida
+
+
+# ------------------------------------------------- rede fora do ar
+def test_exchange_inalcancavel_nao_vira_defeito_do_conector(monkeypatch):
+    """Nenhuma chamada chegando = problema de rede, e o texto precisa dizer.
+
+    Um proxy corporativo, um firewall ou o bloqueio por região da própria
+    Bitget produzem exatamente isto. Se a saída falasse só em "falha", o
+    operador iria procurar defeito no código — onde não há nenhum.
+    """
+    import cli
+    import contextlib
+    import io
+    import socket
+
+    # Uma porta sem ninguém escutando: a conexão é recusada de imediato.
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    porta = s.getsockname()[1]
+    s.close()
+
+    for var in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+        monkeypatch.delenv(var, raising=False)
+
+    args = cli.construir().parse_args([
+        "conferir-bitget", "--base-url", f"http://127.0.0.1:{porta}",
+        "--tentativas", "1"])
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        codigo = args.func(args)
+    saida = buf.getvalue()
+
+    # Código 2 separa "não cheguei lá" de 1, que é "cheguei e algo está errado".
+    assert codigo == 2, saida
+    assert "bloqueio de REDE" in saida
+    assert "não defeito do conector" in saida
+    assert "SEM CONEXÃO" in saida
+    # E oferece uma saída imediata que não depende de rede.
+    assert "INVESTAI_SYNTHETIC=1" in saida
+
+
+def test_erro_vindo_da_exchange_nao_e_tratado_como_rede(bitget_falso,
+                                                        monkeypatch):
+    """Alcançar a Bitget e receber erro é outro problema, com outro código."""
+    codigo, saida = _conferir(bitget_falso("campo"), monkeypatch)
+    assert codigo == 1, saida
+    assert "bloqueio de REDE" not in saida
+
+
+def test_exchange_unreachable_e_subclasse_de_exchange_error():
+    """Quem já trata ExchangeError continua tratando — sem regressão."""
+    from investai.exchanges import ExchangeError, ExchangeUnreachable
+    assert issubclass(ExchangeUnreachable, ExchangeError)

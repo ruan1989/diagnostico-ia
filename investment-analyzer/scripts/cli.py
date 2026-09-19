@@ -181,7 +181,7 @@ def cmd_conferir_bitget(args: argparse.Namespace) -> int:
     NENHUMA ORDEM é enviada — este comando não tem como movimentar dinheiro.
     Rode-o antes de qualquer outra coisa ao sair do modo sintético.
     """
-    from investai.exchanges.base import ExchangeError
+    from investai.exchanges.base import ExchangeError, ExchangeUnreachable
 
     symbol = args.symbol.upper()
     # `--base-url` permite apontar para o ambiente de demonstração da Bitget
@@ -189,13 +189,21 @@ def cmd_conferir_bitget(args: argparse.Namespace) -> int:
     # haveria como provar que este verificador DETECTA problema, só que ele
     # imprime "ok".
     cliente = BitgetClient(None, base_url=args.base_url,
-                           product_type=args.product_type)
+                           product_type=args.product_type,
+                           max_tentativas=args.tentativas)
     falhas: list[str] = []
+    inalcancavel = 0            # quantas etapas nem chegaram à exchange
 
     def etapa(nome: str, fn, valida=None) -> object | None:
+        nonlocal inalcancavel
         print(f"  {nome:.<42}", end=" ", flush=True)
         try:
             valor = fn()
+        except ExchangeUnreachable as exc:
+            print(f"SEM CONEXÃO\n      {exc}")
+            falhas.append(f"{nome}: {exc}")
+            inalcancavel += 1
+            return None
         except ExchangeError as exc:
             print(f"FALHOU\n      {exc}")
             falhas.append(f"{nome}: {exc}")
@@ -326,6 +334,26 @@ def cmd_conferir_bitget(args: argparse.Namespace) -> int:
     cliente.close()
 
     if falhas:
+        # Quando NADA chegou à exchange, o problema quase certamente não é o
+        # conector. Dizer isso poupa o operador de caçar defeito no código
+        # quando o que falta é rota de rede.
+        if inalcancavel and inalcancavel == len(falhas):
+            print(f"\nNENHUMA das {inalcancavel} chamadas chegou à Bitget.")
+            print("Isto é bloqueio de REDE, não defeito do conector. Causas "
+                  "comuns:")
+            print("  - proxy corporativo ou firewall barrando api.bitget.com")
+            print("  - ambiente com política de rede fechada (container, CI)")
+            print("  - bloqueio por região aplicado pela própria Bitget")
+            print("  - DNS sem resolver o host")
+            print("\nTeste fora do sistema para confirmar:")
+            print("  curl -sS https://api.bitget.com/api/v2/public/time")
+            print("\nDetalhes:")
+            for f in falhas[:3]:
+                print(f"  - {f}")
+            print("\nEnquanto isso, o modo sintético funciona sem rede: "
+                  "INVESTAI_SYNTHETIC=1")
+            return 2
+
         print(f"\n{len(falhas)} PROBLEMA(S):")
         for f in falhas:
             print(f"  - {f}")
@@ -428,6 +456,9 @@ def construir() -> argparse.ArgumentParser:
     cb.add_argument("--product-type", default="USDT-FUTURES")
     cb.add_argument("--base-url", default=BASE_URL,
                     help="endpoint alternativo (demo trading, por exemplo)")
+    cb.add_argument("--tentativas", type=int, default=2,
+                    help="tentativas por endpoint (menos = diagnóstico mais "
+                         "rápido quando a rede está fora)")
     cb.set_defaults(func=cmd_conferir_bitget)
 
     f = sub.add_parser("fiis", help="ranking de FIIs para renda passiva")

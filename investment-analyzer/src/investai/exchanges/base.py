@@ -19,6 +19,17 @@ class InsufficientPermissions(ExchangeError):
     """Chave de API sem permissão de trade (ou somente leitura)."""
 
 
+class ExchangeUnreachable(ExchangeError):
+    """A requisição não chegou à exchange: DNS, TLS, proxy, timeout.
+
+    Separado de `ExchangeError` porque a causa e a correção são outras. Uma
+    resposta de erro DA exchange aponta para a chave, o parâmetro ou a conta;
+    não chegar até ela aponta para a rede — proxy corporativo, firewall,
+    bloqueio por região. Tratar os dois como a mesma coisa faz o operador
+    procurar defeito no conector quando o problema está no caminho.
+    """
+
+
 @runtime_checkable
 class MarketDataProvider(Protocol):
     def candles(self, symbol: str, timeframe: str, limit: int = 300,

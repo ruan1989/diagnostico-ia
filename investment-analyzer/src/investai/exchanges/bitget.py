@@ -18,7 +18,9 @@ from urllib.parse import urlencode
 import httpx
 
 from ..models import Candle, MarketSnapshot, Position, Side
-from .base import ExchangeError, InsufficientPermissions
+from .base import (
+    ExchangeError, ExchangeUnreachable, InsufficientPermissions,
+)
 from .keystore import ApiCredentials
 
 log = logging.getLogger("investai.bitget")
@@ -113,7 +115,9 @@ class BitgetClient:
             except httpx.HTTPError as exc:
                 ultimo_erro = exc
                 if tentativa == self.max_tentativas:
-                    raise ExchangeError(f"falha de rede ao chamar {endpoint}: {exc}") from exc
+                    raise ExchangeUnreachable(
+                        f"não foi possível alcançar a Bitget em {endpoint}: "
+                        f"{type(exc).__name__}: {exc}") from exc
                 time.sleep(min(2 ** tentativa * 0.5, 8.0))
                 continue
 
