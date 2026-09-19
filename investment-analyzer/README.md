@@ -132,6 +132,40 @@ considerar dinheiro real.
 
 ---
 
+## Antes de usar dados reais: confira o conector
+
+Todo o resto do sistema foi validado contra um provedor sintético. Isso prova
+a lógica, mas **não** prova que a Bitget responde o que o conector espera.
+Nome de campo trocado, unidade diferente, paginação reinterpretada ou
+granularidade recusada só aparecem falando com a exchange de verdade.
+
+```bash
+python scripts/cli.py conferir-bitget
+```
+
+Usa **apenas endpoints públicos de mercado**: não lê credencial e não envia
+ordem — não tem como movimentar dinheiro. Confere, um a um:
+
+| Checagem | Por que importa |
+|---|---|
+| hora do servidor | a assinatura HMAC leva o timestamp; relógio fora de sincronia é a causa clássica de "assinatura inválida" na primeira ordem |
+| lista de contratos | o par existe e está ativo |
+| contrato | passos de preço/quantidade, mínimo e alavancagem máxima plausíveis |
+| ticker | preço maior que zero — zero indica nome de campo alterado |
+| candles | sem timestamp repetido, espaçamento igual ao pedido, OHLC coerente |
+| paginação | a página anterior é de fato anterior |
+| funding | o endpoint responde |
+| ticker × candle | duas fontes do mesmo preço não divergem mais de 5% |
+
+Sai com código 1 e diz o que fazer se algo falhar. Aponte para outro endpoint
+(o ambiente de demonstração, por exemplo) com `--base-url`.
+
+O próprio verificador é testado: `tests/test_conferir_bitget.py` sobe um
+servidor que imita a API v2 e confirma que cada quebra conhecida é apanhada —
+porque um health check que sempre passa é pior do que nenhum.
+
+---
+
 ## Conectar a Bitget
 
 > Você mencionou "fazer o login e ficar logado". Automação em exchange **não
