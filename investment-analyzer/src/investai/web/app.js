@@ -555,9 +555,19 @@ $("btn-conectar").addEventListener("click", async () => {
   try {
     const d = await api("/api/bitget/conectar", { method: "POST", body: JSON.stringify(corpo) });
     const c = d.conexao || {};
-    mostrarMsg("msg-bitget", c.ok
-      ? `chave ${c.api_key} validada · saldo ${fmtUsd(c.saldo_usdt)} · ${d.aviso}`
-      : `chave salva, mas a validação falhou: ${c.erro}`, !!c.ok);
+    // "aceita" e "validada contra a exchange" são estados diferentes. Dizer
+    // "validada" sem ter consultado a Bitget seria a própria falha que este
+    // sistema existe para não cometer.
+    let texto;
+    if (c.ok && c.validada) {
+      texto = `chave ${c.api_key} validada na Bitget · saldo ${fmtUsd(c.saldo_usdt)} · ${d.aviso}`;
+    } else if (c.ok) {
+      texto = `chave ${c.api_key} armazenada, mas NÃO validada contra a Bitget`
+        + ` — ${c.aviso || "a verificação não foi executada"}. ${d.aviso}`;
+    } else {
+      texto = `chave salva, mas a validação falhou: ${c.erro}`;
+    }
+    mostrarMsg("msg-bitget", texto, !!(c.ok && c.validada));
     // Limpa os campos sensíveis do DOM depois de enviar.
     $("bg-secret").value = ""; $("bg-pass").value = ""; $("bg-master").value = "";
     await carregarStatus();
@@ -605,9 +615,25 @@ $("btn-desarmar").addEventListener("click", () => acao("/api/motor/desarmar-live
 $("btn-rearmar").addEventListener("click", () => acao("/api/risco/rearmar", null, "msg-risco"));
 
 $("btn-armar").addEventListener("click", async () => {
-  const frase = $("confirma-live").value;
+  const frase = ($("confirma-live").value || "").trim();
+  // A checagem barata vem ANTES do diálogo. Na ordem inversa, quem digitasse
+  // a frase errada ainda veria o alerta de "ORDENS REAIS", o aceitaria, e só
+  // então seria recusado — treinando a pessoa a clicar em "OK" num aviso que
+  // deveria ser raro. Um aviso que aparece à toa deixa de ser aviso.
+  const esperada = (configApp && configApp.confirmacao_live) || "";
+  if (frase.toUpperCase() !== esperada.toUpperCase()) {
+    mostrarMsg("msg-motor",
+      `modo real NÃO armado: digite exatamente "${esperada}" no campo de ` +
+      `confirmação. O sistema continua em simulação.`, false);
+    return;
+  }
   if (!confirm("A partir de agora o sistema enviará ORDENS REAIS na sua conta " +
-               "Bitget, sem pedir confirmação a cada operação. Continuar?")) return;
+               "Bitget, sem pedir confirmação a cada operação. Continuar?")) {
+    mostrarMsg("msg-motor",
+      "modo real NÃO armado: você cancelou. O sistema continua em simulação.",
+      false);
+    return;
+  }
   const d = await acao("/api/motor/armar-live", { confirmacao: frase }, "msg-motor");
   if (d) $("confirma-live").value = "";
 });

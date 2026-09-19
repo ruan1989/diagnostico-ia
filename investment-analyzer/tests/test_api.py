@@ -288,3 +288,60 @@ def test_apagar_credenciais(cliente, tmp_path):
     assert r.status_code == 200
     assert r.json()["keystore_apagado"] is True
     assert not (tmp_path / "bitget_keystore.json").exists()
+
+
+def test_conectar_em_modo_sintetico_nao_afirma_validacao(cliente):
+    """"Aceita" e "validada contra a exchange" são estados diferentes.
+
+    Em modo sintético nenhuma requisição chega à Bitget, então a chave não
+    foi conferida. Anunciar "validada" aqui faria o painel dar garantia sobre
+    algo que não foi verificado: uma chave digitada errado ficaria guardada
+    parecendo boa, e o erro só apareceria na primeira ordem real.
+    """
+    r = cliente.post("/api/bitget/conectar", headers=auth(), json={
+        "api_key": "bg_chave_qualquer", "api_secret": "secret_qualquer_x",
+        "passphrase": "passphrase_x", "senha_mestra": "senha_mestra_ok"})
+    assert r.status_code == 200
+    conexao = r.json()["conexao"]
+    assert conexao["ok"] is True          # a requisição foi aceita
+    assert conexao["validada"] is False   # mas nada foi verificado
+    assert "NÃO verificada" in conexao["aviso"]
+
+
+def test_evento_de_conexao_registra_se_houve_validacao(cliente):
+    """A auditoria precisa distinguir os dois casos depois do fato."""
+    cliente.post("/api/bitget/conectar", headers=auth(), json={
+        "api_key": "bg_chave_qualquer", "api_secret": "secret_qualquer_x",
+        "passphrase": "passphrase_x", "senha_mestra": "senha_mestra_ok"})
+    eventos = cliente.get("/api/eventos?limite=50").json()["eventos"]
+    conexao = [e for e in eventos if "credencial Bitget" in e["mensagem"]]
+    assert conexao, "conexão de credencial precisa gerar evento"
+
+
+def test_ciclo_diz_quando_nao_houve_varredura(cliente):
+    """"ok" esconde a diferença entre "varri e nada passou" e "nem varri".
+
+    O segundo ciclo seguido cai dentro do intervalo de varredura e só gerencia
+    as posições abertas. Se a resposta não disser isso, quem clicou acredita
+    que o mercado foi analisado quando não foi.
+    """
+    primeiro = cliente.post("/api/motor/ciclo", headers=auth()).json()
+    assert primeiro["resultado"]["scan"] is True
+    assert "mercado varrido" in primeiro["mensagem"]
+
+    segundo = cliente.post("/api/motor/ciclo", headers=auth()).json()
+    assert segundo["resultado"]["scan"] is False
+    assert "SEM VARREDURA" in segundo["mensagem"]
+    assert "intervalo" in segundo["mensagem"]
+
+
+def test_ciclo_sem_oportunidade_nao_finge_atividade(cliente):
+    """Nenhuma entrada é um resultado, e precisa ser dito como tal."""
+    d = cliente.post("/api/motor/ciclo", headers=auth()).json()
+    entradas = d["resultado"]["entradas"]
+    if not entradas:
+        assert "NENHUMA oportunidade" in d["mensagem"]
+        assert "capital preservado" in d["mensagem"].lower()
+    else:
+        # Havendo entrada, a mensagem nomeia o par — não basta um contador.
+        assert any(e["symbol"] in d["mensagem"] for e in entradas)

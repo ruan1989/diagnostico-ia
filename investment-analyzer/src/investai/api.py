@@ -319,10 +319,16 @@ class AppState:
         """Anexa credenciais ao cliente e valida contra a exchange."""
         self.credenciais = cred
         if self.usar_sintetico:
+            # `ok` diz que a requisição foi aceita; `validada` diz que a chave
+            # foi conferida CONTRA A EXCHANGE. São coisas diferentes, e em
+            # modo sintético só a primeira é verdadeira. Colapsar as duas faria
+            # o painel anunciar "chave validada" para uma chave digitada
+            # errado, e o erro só apareceria na primeira ordem real.
             self.erro_conexao = ""
-            return {"ok": True, "api_key": cred.mascara(),
+            return {"ok": True, "validada": False, "api_key": cred.mascara(),
                     "aviso": "modo sintético ativo: credencial armazenada mas "
-                             "nenhuma ordem real será enviada"}
+                             "NÃO verificada contra a Bitget, e nenhuma ordem "
+                             "real será enviada"}
         if self.bitget is None:
             self.bitget = BitgetClient(
                 cred, product_type=self.settings.exec.product_type,
@@ -331,6 +337,9 @@ class AppState:
             self.bitget.cred = cred
         self.executor.backend = self.bitget
         diag = self.bitget.verificar_credenciais()
+        # Aqui a chave foi de fato consultada na exchange, então `validada`
+        # acompanha `ok`.
+        diag["validada"] = bool(diag.get("ok"))
         self.erro_conexao = "" if diag.get("ok") else str(diag.get("erro", ""))
         if diag.get("ok"):
             self.risk.sincronizar_capital(float(diag.get("saldo_usdt", 0.0)))
@@ -578,7 +587,10 @@ def criar_app(state: AppState | None = None) -> FastAPI:
     @app.post("/api/motor/ciclo", dependencies=protegido)
     def motor_ciclo() -> dict[str, Any]:
         """Executa um único ciclo — útil para testar sem deixar o loop ligado."""
-        return {"resultado": st.engine.ciclo(), "status": st.engine.status()}
+        antes = st.engine.estado.ultimo_scan_ms
+        resultado = st.engine.ciclo()
+        return {"resultado": resultado, "status": st.engine.status(),
+                "mensagem": _resumo_do_ciclo(resultado, antes)}
 
     @app.post("/api/motor/armar-live", dependencies=protegido)
     def motor_armar(req: ArmarLive) -> dict[str, Any]:
@@ -619,6 +631,46 @@ def criar_app(state: AppState | None = None) -> FastAPI:
         st.store.registrar_evento("ALERTA", "api", "kill switch rearmado manualmente")
         return {"mensagem": "kill switch rearmado", "risco": st.risk.estado.to_dict()}
 
+
+    def _resumo_do_ciclo(resultado: dict[str, Any], ultimo_scan_antes: int) -> str:
+        """Diz em uma linha o que o ciclo fez — inclusive quando não fez nada.
+
+        Sem isto o painel respondia "ok" a qualquer ciclo, e "ok" some com a
+        diferença entre "varri o mercado e nada passou" e "nem varri, porque o
+        intervalo ainda não venceu". Quem clicou fica achando que houve
+        varredura. Um botão de operação precisa dizer o que aconteceu.
+        """
+        partes: list[str] = []
+
+        gestao = resultado.get("gestao") or []
+        if gestao:
+            partes.append(f"{len(gestao)} evento(s) de gestão de posição")
+
+        if not resultado.get("scan"):
+            intervalo = st.settings.exec.intervalo_scan_segundos
+            falta = max(0, intervalo - (int(time.time() * 1000)
+                                        - ultimo_scan_antes) // 1000)
+            partes.append(
+                f"SEM VARREDURA neste ciclo: o intervalo de {intervalo}s ainda "
+                f"não venceu (faltam ~{falta}s). Só a gestão das posições "
+                f"abertas rodou")
+            return "; ".join(partes) + "."
+
+        entradas = resultado.get("entradas") or []
+        abertas = [e for e in entradas if e.get("ok")]
+        bloqueadas = [e for e in entradas if not e.get("ok")]
+        partes.append("mercado varrido")
+        if abertas:
+            partes.append(f"{len(abertas)} posição(ões) aberta(s): "
+                          + ", ".join(e["symbol"] for e in abertas))
+        if bloqueadas:
+            partes.append(f"{len(bloqueadas)} entrada(s) barrada(s) pelo risco: "
+                          + "; ".join(f"{e['symbol']} ({e.get('motivo', '')})"
+                                      for e in bloqueadas[:3]))
+        if not abertas and not bloqueadas:
+            partes.append("NENHUMA oportunidade atendeu aos critérios — "
+                          "capital preservado")
+        return "; ".join(partes) + "."
 
     def _candles_ou_404(symbol: str, *, limit: int) -> list[Any]:
         """Par desconhecido é 404, não 500.
