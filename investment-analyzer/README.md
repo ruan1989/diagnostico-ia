@@ -481,6 +481,21 @@ de qualquer sequência de validações em histórico.
 Os testes rodam offline, com dados sintéticos determinísticos e timestamp fixo —
 não dependem de rede nem de chave de API.
 
+### Integração contínua
+
+`.github/workflows/investment-analyzer.yml` roda a suíte em Python 3.11, 3.12 e
+3.13, mais um job de análise estática (`pyflakes`, `node --check` no JS do
+painel e uma checagem de que a configuração padrão é internamente consistente).
+
+Essa última checagem existe por um motivo concreto: já houve uma combinação
+padrão em que o primeiro alvo do plano era 1,5 R e o R:R mínimo era 1,8 R —
+nenhum sinal poderia passar, e nada no código acusava. `Settings.validar()`
+cruza os blocos de configuração, e o CI garante que ninguém reintroduza isso.
+
+O workflow é limitado a `investment-analyzer/**`: o resto do repositório é
+código anterior, sem testes, e incluí-lo deixaria o CI vermelho por motivos
+alheios a qualquer mudança aqui.
+
 ---
 
 ## Limitações conhecidas
