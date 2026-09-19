@@ -1,0 +1,108 @@
+# Conferência do conector contra a Bitget REAL.
+#
+# Por que é um workflow separado e MANUAL
+# ---------------------------------------
+# Este é o único teste do projeto que depende de rede. Colocá-lo no CI normal
+# deixaria o pipeline vermelho sempre que a Bitget ficasse instável, que é
+# instabilidade DELA e não do código — e um CI que fica vermelho por motivo
+# alheio ensina o time a ignorar CI vermelho.
+#
+# Roda só quando alguém clica em "Run workflow" na aba Actions.
+#
+# Segurança: usa APENAS endpoints públicos de mercado. Não lê credencial,
+# não usa secret e não envia ordem. Não tem como movimentar dinheiro.
+name: conferir-bitget (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: 'Par a conferir'
+        default: 'BTCUSDT'
+        required: false
+      product_type:
+        description: 'Tipo de produto da Bitget'
+        default: 'USDT-FUTURES'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  conferir:
+    name: conferir conector contra a Bitget real
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: investment-analyzer
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: investment-analyzer/requirements.txt
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Conferir o conector
+        id: conferir
+        # `set +e` porque o código de saída é o resultado do teste, não um
+        # erro do passo: 0 conferido, 1 a Bitget respondeu algo inesperado,
+        # 2 não foi possível alcançá-la.
+        env:
+          # Via env, não interpolado no comando: entrada de usuário montada
+          # direto na linha de shell é superfície de injeção, mesmo vindo de
+          # quem tem permissão de escrita no repositório.
+          SYMBOL: ${{ inputs.symbol }}
+          PRODUCT_TYPE: ${{ inputs.product_type }}
+        run: |
+          set +e
+          python scripts/cli.py conferir-bitget \
+            --symbol "$SYMBOL" \
+            --product-type "$PRODUCT_TYPE" \
+            | tee resultado.txt
+          echo "codigo=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Resumo
+        run: |
+          codigo="${{ steps.conferir.outputs.codigo }}"
+          {
+            echo "## Conferência do conector Bitget"
+            echo
+            echo '```'
+            cat resultado.txt
+            echo '```'
+            echo
+            case "$codigo" in
+              0) echo "### Resultado: CONFERIDO"
+                 echo
+                 echo "A leitura de mercado funciona contra a Bitget real."
+                 echo "Envio de ordem exige chave de API e NÃO foi testado aqui." ;;
+              1) echo "### Resultado: RESPOSTA INESPERADA"
+                 echo
+                 echo "A Bitget respondeu, mas algo divergiu do que o conector"
+                 echo "espera. Isto é um defeito a corrigir — veja acima qual"
+                 echo "checagem falhou e com que valor." ;;
+              2) echo "### Resultado: SEM CONEXÃO"
+                 echo
+                 echo "Nenhuma chamada chegou à Bitget a partir deste runner."
+                 echo "Causa provável: bloqueio por região aplicado pela Bitget"
+                 echo "aos endereços do GitHub Actions. Não é defeito do"
+                 echo "conector — rode a conferência de uma rede própria." ;;
+              *) echo "### Resultado: código inesperado ($codigo)" ;;
+            esac
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Código 2 não reprova o job: "a rede daqui não alcança a Bitget" é
+          # uma informação válida, não uma falha do que estamos conferindo.
+          if [ "$codigo" = "1" ]; then
+            echo "::error::o conector precisa de correção (código 1)"
+            exit 1
+          fi

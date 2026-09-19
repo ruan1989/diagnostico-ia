@@ -173,6 +173,23 @@ para confirmar fora do sistema.
 exemplo). `--tentativas 1` corta as re-tentativas: com a rede fora, o
 diagnóstico sai em ~2s em vez de ~40s.
 
+### Sem instalar nada: rodar pelo GitHub Actions
+
+Se a sua rede bloqueia a Bitget, ou se você só quer o resultado sem preparar
+ambiente local, a mesma conferência roda nos runners do GitHub:
+
+**Actions → `conferir-bitget (manual)` → Run workflow**
+
+O resultado aparece no resumo da execução. É um workflow separado e **manual**
+de propósito: este é o único teste do projeto que depende de rede, e colocá-lo
+no CI normal deixaria o pipeline vermelho sempre que a Bitget oscilasse — o
+que é instabilidade dela, não do código. CI que fica vermelho por motivo alheio
+ensina o time a ignorar CI vermelho.
+
+Código 2 (sem conexão) **não reprova** o job: "a rede daqui não alcança a
+Bitget" é informação válida, não falha do que está sendo conferido. Só o
+código 1 — a Bitget respondeu algo inesperado — reprova.
+
 O próprio verificador é testado: `tests/test_conferir_bitget.py` sobe um
 servidor que imita a API v2 e confirma que cada quebra conhecida é apanhada —
 porque um health check que sempre passa é pior do que nenhum.
