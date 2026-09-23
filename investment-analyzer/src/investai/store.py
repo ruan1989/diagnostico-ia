@@ -70,6 +70,33 @@ CREATE TABLE IF NOT EXISTS eventos (
 );
 CREATE INDEX IF NOT EXISTS ix_eventos_ts ON eventos(ts DESC);
 
+CREATE TABLE IF NOT EXISTS shadow_decisoes (
+    id           TEXT PRIMARY KEY,
+    decidido_em  INTEGER NOT NULL,
+    symbol       TEXT NOT NULL,
+    side         TEXT NOT NULL,
+    entry        REAL NOT NULL,
+    stop_loss    REAL NOT NULL,
+    alvo         REAL NOT NULL,
+    size         REAL NOT NULL,
+    score        REAL,
+    estrategia   TEXT,
+    -- liquidação, preenchida depois pelo que o mercado fez
+    estado       TEXT NOT NULL DEFAULT 'pendente',
+    fechado_em   INTEGER,
+    preco_saida  REAL,
+    motivo_saida TEXT,
+    resultado_r  REAL,
+    barras_ate_saida INTEGER,
+    payload      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_shadow_estado ON shadow_decisoes(estado, decidido_em);
+CREATE INDEX IF NOT EXISTS ix_shadow_symbol ON shadow_decisoes(symbol, decidido_em DESC);
+-- Uma decisão por par/direção/instante: se o ciclo rodar duas vezes no mesmo
+-- minuto, a segunda não duplica o registro e não infla a amostra.
+CREATE UNIQUE INDEX IF NOT EXISTS ix_shadow_unico
+    ON shadow_decisoes(symbol, side, decidido_em);
+
 CREATE TABLE IF NOT EXISTS estado (
     chave TEXT PRIMARY KEY,
     valor TEXT NOT NULL,
@@ -97,6 +124,79 @@ class Store:
             self._conn.close()
 
     # ------------------------------------------------------------------ sinais
+    # ------------------------------------------------------------- shadow
+    def salvar_decisao_shadow(self, d: dict[str, Any]) -> bool:
+        """Grava uma decisão de shadow mode. Devolve False se já existia.
+
+        O shadow mode roda por semanas, atravessando reinícios da máquina.
+        Guardar em memória perderia a amostra justamente quando ela começa a
+        ter tamanho suficiente para dizer alguma coisa.
+        """
+        with self._lock:
+            try:
+                self._conn.execute(
+                    """INSERT INTO shadow_decisoes
+                       (id, decidido_em, symbol, side, entry, stop_loss, alvo,
+                        size, score, estrategia, estado, payload)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,'pendente',?)""",
+                    (d["id"], d["decidido_em"], d["symbol"], d["side"],
+                     d["entry"], d["stop_loss"], d["alvo"], d["size"],
+                     d.get("score", 0.0), d.get("estrategia", ""),
+                     json.dumps(d, ensure_ascii=False)))
+                self._conn.commit()
+                return True
+            except sqlite3.IntegrityError:
+                return False
+
+    def liquidar_decisao_shadow(self, decisao_id: str, *, estado: str,
+                                fechado_em: int, preco_saida: float,
+                                motivo_saida: str, resultado_r: float,
+                                barras: int) -> None:
+        with self._lock:
+            self._conn.execute(
+                """UPDATE shadow_decisoes
+                   SET estado=?, fechado_em=?, preco_saida=?, motivo_saida=?,
+                       resultado_r=?, barras_ate_saida=?
+                   WHERE id=?""",
+                (estado, fechado_em, preco_saida, motivo_saida, resultado_r,
+                 barras, decisao_id))
+            self._conn.commit()
+
+    def decisoes_shadow(self, *, estado: str | None = None,
+                        limite: int = 500) -> list[dict[str, Any]]:
+        sql = ("SELECT id, decidido_em, symbol, side, entry, stop_loss, alvo, "
+               "size, score, estrategia, estado, fechado_em, preco_saida, "
+               "motivo_saida, resultado_r, barras_ate_saida "
+               "FROM shadow_decisoes")
+        args: list[Any] = []
+        if estado:
+            sql += " WHERE estado = ?"
+            args.append(estado)
+        sql += " ORDER BY decidido_em DESC LIMIT ?"
+        args.append(int(limite))
+        with self._lock:
+            linhas = self._conn.execute(sql, args).fetchall()
+        campos = ("id","decidido_em","symbol","side","entry","stop_loss","alvo",
+                  "size","score","estrategia","estado","fechado_em",
+                  "preco_saida","motivo_saida","resultado_r","barras_ate_saida")
+        return [dict(zip(campos, l)) for l in linhas]
+
+    def resumo_shadow(self) -> dict[str, Any]:
+        with self._lock:
+            tot = self._conn.execute(
+                "SELECT estado, COUNT(*) FROM shadow_decisoes GROUP BY estado"
+            ).fetchall()
+            janela = self._conn.execute(
+                "SELECT MIN(decidido_em), MAX(decidido_em) FROM shadow_decisoes"
+            ).fetchone()
+            erres = [r[0] for r in self._conn.execute(
+                "SELECT resultado_r FROM shadow_decisoes "
+                "WHERE resultado_r IS NOT NULL").fetchall()]
+        por_estado = {e: n for e, n in tot}
+        return {"por_estado": por_estado,
+                "primeira_ms": janela[0], "ultima_ms": janela[1],
+                "resultados_r": erres}
+
     def salvar_sinal(self, s: Signal) -> int:
         with self._lock:
             cur = self._conn.execute(

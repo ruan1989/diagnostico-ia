@@ -31,6 +31,7 @@
     <button data-aba="portfolio">Portfólio &amp; risco</button>
     <button data-aba="multiativos">Multiativos</button>
     <button data-aba="operacao">Operação &amp; Bitget</button>
+    <button data-aba="shadow">Shadow mode</button>
     <button data-aba="historico">Histórico</button>
     <button data-aba="sistema">Sistema &amp; dados</button>
   </nav>
@@ -468,6 +469,49 @@
 </section>
 
 <!-- ========================================================== HISTÓRICO -->
+<section class="aba" id="aba-shadow">
+  <div class="aviso">
+    <strong>O sistema decide, registra e não envia ordem.</strong> Cada decisão
+    abaixo foi carimbada <em>antes</em> de o preço andar; nos ciclos seguintes o
+    sistema confere o que o mercado fez com ela. Nenhum ajuste posterior de
+    parâmetro melhora estes números — é essa a diferença entre shadow mode e
+    backtest.
+  </div>
+
+  <div class="grid grid-kpi">
+    <div class="card"><div class="card-titulo">Decisões registradas</div>
+      <div class="kpi-valor" id="sh-total">—</div>
+      <div class="kpi-sub" id="sh-pendentes">—</div></div>
+    <div class="card"><div class="card-titulo">Expectativa medida</div>
+      <div class="kpi-valor" id="sh-ev">—</div>
+      <div class="kpi-sub">por decisão, em R</div></div>
+    <div class="card"><div class="card-titulo">Taxa de acerto</div>
+      <div class="kpi-valor dim" id="sh-wr">—</div>
+      <div class="kpi-sub" id="sh-ganhos">—</div></div>
+    <div class="card"><div class="card-titulo">Dias corridos</div>
+      <div class="kpi-valor dim" id="sh-dias">—</div>
+      <div class="kpi-sub" id="sh-conclusivo">—</div></div>
+  </div>
+
+  <div class="botoes">
+    <button class="btn btn-primario" id="btn-shadow">Atualizar</button>
+    <button class="btn" id="btn-shadow-liquidar">Conferir pendentes agora</button>
+  </div>
+  <div class="msg" id="msg-shadow"></div>
+  <div id="sh-avisos"></div>
+
+  <h3>Decisões registradas</h3>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Par</th><th>Lado</th><th>Decidida em</th><th>Entrada</th>
+        <th>Stop</th><th>Alvo</th><th>Estado</th><th>Resultado</th><th>Motivo</th>
+      </tr></thead>
+      <tbody id="tbody-shadow"></tbody>
+    </table>
+  </div>
+</section>
+
 <section class="aba" id="aba-historico">
   <div class="grid grid-kpi">
     <div class="card"><div class="card-titulo">Operações realizadas</div>

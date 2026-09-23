@@ -188,6 +188,55 @@ considerar dinheiro real.
 
 ---
 
+## Shadow mode: medir antes de arriscar
+
+O backtest responde *"esta estratégia teria dado lucro no passado?"* — pergunta
+fraca quando o passado é o mesmo período em que a estratégia foi ajustada. O
+shadow mode responde a pergunta cara: **as decisões que este sistema toma hoje,
+sobre dados que nunca viu, dão lucro?**
+
+Está **ligado por padrão**. A cada ciclo de análise:
+
+1. registra em disco toda decisão que o sistema **aprovou** — com entrada, stop,
+   alvo e tamanho, carimbada no instante em que foi tomada;
+2. confere as decisões anteriores contra o que o mercado fez desde então;
+3. nunca envia ordem.
+
+Veja a amostra crescer na aba **Shadow mode**, ou em `GET /api/shadow`.
+
+Para desligar: `INVESTAI_SHADOW=0`.
+
+### Como a liquidação decide o resultado
+
+Caminha vela a vela a partir da decisão, na ordem. Numa vela que toca stop e
+alvo, assume **stop** — sem dado intrabar não há como saber qual veio primeiro,
+e errar para o lado otimista aqui produziria exatamente o número bonito que
+este modo existe para evitar.
+
+Decisão que não resolve em 14 dias é encerrada a mercado. Sem prazo, só as que
+fecham rápido entrariam na conta, e a expectativa mediria outra coisa.
+
+### Quando o resumo passa a valer
+
+| Exigência | Mínimo |
+|---|---|
+| decisões liquidadas | 40 |
+| dias corridos | 21 |
+
+São os mesmos do gate de `paper_trading`. Abaixo disso, a tela mostra os
+números **e diz que ainda são anedota**, não evidência. Uma amostra concentrada
+em poucos dias mede um regime de mercado, não a estratégia.
+
+### O shadow mode depende da validação
+
+O agente quantitativo se abstém enquanto não há estatística medida, e sem ele a
+cobertura analítica fica abaixo do mínimo: **nada é aprovado, logo nada é
+registrado**. Rode a validação primeiro, pela aba *Validação & promoção* ou por
+`POST /api/validacao/estrategia` — é ela que alimenta a estatística e destrava
+o ciclo. Numa medição, a cobertura subiu de 42% para 64% depois disso.
+
+---
+
 ## Antes de usar dados reais: confira o conector
 
 Todo o resto do sistema foi validado contra um provedor sintético. Isso prova

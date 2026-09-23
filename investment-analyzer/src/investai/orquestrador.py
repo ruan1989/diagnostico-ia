@@ -58,6 +58,10 @@ class AnaliseCompleta:
     anomalias: RelatorioAnomalias | None = None
     consenso: Consenso | None = None
     risco: DecisaoRiskEngine | None = None
+    # O plano de trade do lado escolhido: entrada, stop e alvos. Sem guardá-lo
+    # a decisão fica sem os números que a tornariam uma ordem — e o shadow
+    # mode não teria o que registrar.
+    sinal: Signal | None = None
     preco: float = 0.0
     erro: str = ""
 
@@ -139,6 +143,11 @@ class AnaliseCompleta:
             "regime": self.regime.to_dict() if self.regime else None,
             "anomalias": (self.anomalias.to_dict()
                           if self.anomalias else None),
+            "plano": ({"entry": self.sinal.entry,
+                       "stop_loss": self.sinal.stop_loss,
+                       "take_profits": self.sinal.take_profits,
+                       "risk_reward": self.sinal.risk_reward}
+                      if self.sinal else None),
             "consenso": self.consenso.to_dict() if self.consenso else None,
             "risco": self.risco.to_dict() if self.risco else None,
         }
@@ -324,6 +333,7 @@ class Orquestrador:
         a.etapa_final = "consenso"
         melhor: Consenso | None = None
         melhor_risco: DecisaoRiskEngine | None = None
+        melhor_sinal: Signal | None = None
 
         for direcao, side in ((+1, Side.LONG), (-1, Side.SHORT)):
             ctx = ContextoAnalise(
@@ -353,9 +363,11 @@ class Orquestrador:
                     ordem[melhor.decisao], melhor.score):
                 melhor = consenso
                 melhor_risco = decisao_risco
+                melhor_sinal = sinal
 
         a.consenso = melhor
         a.risco = melhor_risco
+        a.sinal = melhor_sinal
         a.etapa_final = "decisao"
 
         # ------------------------------------------------- 7) alertas

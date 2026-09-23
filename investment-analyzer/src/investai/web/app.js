@@ -102,6 +102,7 @@ document.querySelectorAll("nav button").forEach((b) => {
     if (b.dataset.aba === "renda") carregarFiis();
     if (b.dataset.aba === "historico") carregarHistorico();
     if (b.dataset.aba === "operacao") carregarStatus();
+    if (b.dataset.aba === "shadow") carregarShadow();
   });
 });
 
@@ -1310,6 +1311,79 @@ $("btn-stress").addEventListener("click", rodarStress);
 $("btn-rf").addEventListener("click", compararRendaFixa);
 $("btn-comparar-classes").addEventListener("click", compararClasses);
 $("btn-acao-teste").addEventListener("click", testarAcaoSemFonte);
+/* ------------------------------------------------------------ shadow mode */
+// Casas decimais pela escala do ativo: 12 casas num par de US$ 86 mil é
+// ruído, e 2 casas num par de US$ 0,46 apaga a informação.
+function preco(v) {
+  if (v === null || v === undefined) return "—";
+  const casas = Math.abs(v) >= 100 ? 2 : Math.abs(v) >= 1 ? 4 : 6;
+  return Number(v).toLocaleString("pt-BR",
+    { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
+async function carregarShadow() {
+  try {
+    const d = await api("/api/shadow");
+    const r = d.resumo;
+
+    $("sh-total").textContent = r.total;
+    $("sh-pendentes").textContent = r.pendentes + " ainda em aberto";
+    $("sh-ev").textContent = r.expectativa_r === null
+      ? "—" : (r.expectativa_r >= 0 ? "+" : "") + r.expectativa_r.toFixed(3) + "R";
+    $("sh-ev").className = "kpi-valor " + (r.expectativa_r === null ? "dim"
+      : (r.expectativa_r > 0 ? "pos" : "neg"));
+    $("sh-wr").textContent = r.win_rate === null
+      ? "—" : (r.win_rate * 100).toFixed(1) + "%";
+    $("sh-ganhos").textContent = r.ganhos + " no alvo · " + r.perdas +
+      " no stop · " + r.expiradas + " expiradas";
+    $("sh-dias").textContent = r.dias_corridos.toFixed(1);
+    // Só declara conclusão quando a amostra sustenta: caso contrário o
+    // número acima é anedota, e a tela precisa dizer isso.
+    $("sh-conclusivo").textContent = r.conclusivo
+      ? "amostra suficiente" : "ainda não conclusivo";
+
+    $("sh-avisos").innerHTML = (r.avisos || []).length
+      ? r.avisos.map((a) => `<div class="aviso">${esc(a)}</div>`).join("")
+      : `<div class="nota">${esc(r.observacao)}</div>`;
+
+    $("tbody-shadow").innerHTML = (d.decisoes || []).length
+      ? d.decisoes.map((x) => {
+          const chip = x.estado === "alvo" ? "chip-a"
+            : x.estado === "stop" ? "chip-rejeitado" : "chip-c";
+          const res = x.resultado_r === null || x.resultado_r === undefined
+            ? "—"
+            : `<span class="${x.resultado_r >= 0 ? "pos" : "neg"}">${
+                (x.resultado_r >= 0 ? "+" : "") + x.resultado_r.toFixed(2)}R</span>`;
+          return `<tr>
+            <td class="mono"><strong>${esc(x.symbol)}</strong></td>
+            <td>${esc(x.side)}</td>
+            <td class="faint" style="text-align:right">${
+              new Date(x.decidido_em).toLocaleString("pt-BR")}</td>
+            <td class="num">${preco(x.entry)}</td>
+            <td class="num">${preco(x.stop_loss)}</td>
+            <td class="num">${preco(x.alvo)}</td>
+            <td style="text-align:right"><span class="chip ${chip}">${esc(x.estado)}</span></td>
+            <td class="num">${res}</td>
+            <td class="dim td-texto" style="font-size:11.5px">${esc(x.motivo_saida || "—")}</td>
+          </tr>`;
+        }).join("")
+      : `<tr><td colspan="9" class="vazio">nenhuma decisão registrada ainda —
+         o sistema só registra o que aprova, e aprova pouco</td></tr>`;
+  } catch (e) {
+    mostrarMsg("msg-shadow", e.message, false);
+  }
+}
+
+$("btn-shadow").addEventListener("click", carregarShadow);
+$("btn-shadow-liquidar").addEventListener("click", async () => {
+  const d = await acao("/api/shadow/liquidar", null, "msg-shadow");
+  if (d) {
+    mostrarMsg("msg-shadow",
+      `${d.liquidadas} decisão(ões) conferida(s) contra o mercado`, true);
+    await carregarShadow();
+  }
+});
+
 $("btn-sistema").addEventListener("click", carregarSistema);
 $("btn-relatorio").addEventListener("click", gerarRelatorio);
 

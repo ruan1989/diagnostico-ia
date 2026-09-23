@@ -37,6 +37,7 @@ from .assets import (
 from .backtest.engine import rodar_backtest
 from .data import AssetClass, DataKind, registry_padrao
 from .ops import monitor_padrao
+from .ops.shadow_live import ShadowLive
 from .orquestrador import Orquestrador
 from .portfolio import (
     CENARIOS_PADRAO, analisar_diversificacao, matriz_correlacao,
@@ -252,6 +253,17 @@ class AppState:
             alertas=self.alertas, journal=self.journal,
             relogio=self._relogio_dados)
         self.ultimo_ciclo = None
+
+        # Shadow mode: registra em disco a decisão que o sistema tomaria e,
+        # nos ciclos seguintes, confere o que o mercado fez com ela. Não
+        # envia ordem — é a medida honesta de "estas decisões dão dinheiro?"
+        # antes de arriscar capital. Ligado por padrão; desligue com
+        # INVESTAI_SHADOW=0.
+        self.shadow = ShadowLive(
+            self.store, self.hub,
+            timeframe=self.settings.signal.timeframe_principal)
+        self.shadow_ligado = os.environ.get(
+            "INVESTAI_SHADOW", "1").strip().lower() not in {"0", "false", "nao", "não"}
 
         self.fii_provider = provider_padrao(
             self.settings.data_dir,
@@ -698,6 +710,19 @@ def criar_app(state: AppState | None = None) -> FastAPI:
         st.ultimo_ciclo = resultado
         payload = resultado.to_dict()
         payload["aviso"] = AVISO_PADRAO
+
+        if st.shadow_ligado:
+            # A ordem importa: liquidar ANTES de registrar evita conferir uma
+            # decisão contra a própria vela que a originou.
+            fechadas = st.shadow.liquidar_pendentes()
+            novas = st.shadow.registrar_ciclo(resultado.analises)
+            payload["shadow"] = {"registradas": len(novas),
+                                 "liquidadas": fechadas}
+            if novas:
+                st.store.registrar_evento(
+                    "INFO", "shadow",
+                    f"{len(novas)} decisão(ões) registrada(s) em shadow mode",
+                    {"ids": novas})
         return payload
 
     @app.get("/api/analise-completa/{symbol}")
@@ -758,6 +783,24 @@ def criar_app(state: AppState | None = None) -> FastAPI:
                           "NÃO CONFIGURADA; a interface nunca preenche o "
                           "espaço com número plausível",
         }
+
+    @app.get("/api/shadow")
+    def shadow() -> dict[str, Any]:
+        """O que as decisões tomadas ao vivo produziram, até agora."""
+        resumo = st.shadow.resumo().to_dict()
+        return {
+            "ligado": st.shadow_ligado,
+            "resumo": resumo,
+            "decisoes": st.shadow.store.decisoes_shadow(limite=200),
+            "minimos": {"decisoes": 40, "dias": 21},
+            "aviso": AVISO_PADRAO,
+        }
+
+    @app.post("/api/shadow/liquidar", dependencies=protegido)
+    def shadow_liquidar() -> dict[str, Any]:
+        """Força a conferência das decisões pendentes contra o mercado."""
+        n = st.shadow.liquidar_pendentes()
+        return {"liquidadas": n, "resumo": st.shadow.resumo().to_dict()}
 
     @app.get("/api/saude")
     def saude() -> dict[str, Any]:
