@@ -73,6 +73,62 @@ Este foi construído para ser o primeiro.
 
 ---
 
+## Rodar no seu computador (um comando)
+
+O painel precisa rodar na **sua** máquina: é lá que a chave de API fica, e é de
+lá que as ordens saem. Nenhuma página hospedada em outro lugar consegue — nem
+deveria — falar com a Bitget usando a sua credencial.
+
+**macOS ou Linux**
+
+```bash
+./iniciar.sh
+```
+
+**Windows** — clique duas vezes em `iniciar.bat`, ou no prompt:
+
+```
+iniciar.bat
+```
+
+O script faz tudo sozinho na primeira vez: confere a versão do Python, cria o
+ambiente virtual, instala as dependências, gera um token de acesso em `.env`
+(legível só por você), **confere a conexão com a Bitget**, e abre o navegador
+em `http://127.0.0.1:8000`.
+
+Cole o token exibido no terminal no campo *Token da API*, no canto superior
+direito do painel.
+
+### O que o iniciador faz com a conexão
+
+Antes de subir, ele roda `conferir-bitget`. O que acontece depois depende do
+resultado:
+
+| Resultado | O que o iniciador faz |
+|---|---|
+| conferido | sobe com **dados reais** de mercado da Bitget |
+| a Bitget respondeu algo inesperado | **para** e mostra o que divergiu — dado lido errado é pior que dado ausente |
+| não alcançou a Bitget | avisa e sobe em **modo simulado**, deixando claro que os preços são gerados |
+
+Para forçar o modo simulado (útil para conhecer o sistema sem rede):
+
+```bash
+./iniciar.sh --simulado
+```
+
+### Dados reais não exigem chave de API
+
+Cotações, candles e funding vêm de endpoints **públicos** da Bitget. O painel
+mostra mercado real sem nenhuma credencial.
+
+A chave de API só é necessária para o motor **enviar ordens**. Ao criá-la em
+*Bitget → API Management*, dê permissão de leitura e de trade em futuros e
+**deixe saque e transferência desabilitados**: assim, no pior cenário, quem
+tiver a chave pode operar, mas não pode tirar dinheiro da conta. A senha da sua
+conta Bitget nunca é usada por este sistema.
+
+---
+
 ## Instalação
 
 Requer Python 3.11 ou superior.
