@@ -44,3 +44,12 @@ __all__ += [
     "drift_de_performance", "drift_de_regime", "piso_ruido_ece", "psi",
     "sigma_skill",
 ]
+from .reconciliacao import (
+    TOL_CAPITAL, TOL_PRECO, TOL_TAMANHO, Divergencia, Reconciliador,
+    RelatorioReconciliacao, comparar_posicoes, reconciliar,
+)
+
+__all__ += [
+    "Divergencia", "Reconciliador", "RelatorioReconciliacao", "TOL_CAPITAL",
+    "TOL_PRECO", "TOL_TAMANHO", "comparar_posicoes", "reconciliar",
+]

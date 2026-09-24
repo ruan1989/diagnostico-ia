@@ -43,6 +43,7 @@ from .ops.comandos import (
     TravaOperacao, diagnostico, liberar_trava, parada_emergencia,
     status as status_operacional, status_texto as status_texto_fn,
 )
+from .ops.reconciliacao import Reconciliador
 from .ops.shadow_live import ShadowLive
 from .orquestrador import Orquestrador
 from .portfolio import (
@@ -313,6 +314,11 @@ class AppState:
             alertas=self.alertas, journal=self.journal,
             relogio=self._relogio_dados)
         self.ultimo_ciclo = None
+
+        # Reconciliação de estado: o que este sistema acha que tem contra o
+        # que a corretora tem. Divergência pausa, não corrige.
+        self.reconciliador = Reconciliador(self.executor, self.store,
+                                           trava=self.trava, risk=self.risk)
 
         # Reconciliação de subida: intenções de ordem que ficaram com destino
         # desconhecido em uma execução anterior. Roda aqui, antes de o motor
@@ -766,6 +772,19 @@ def criar_app(state: AppState | None = None) -> FastAPI:
         if not res.get("ok"):
             raise HTTPException(400, res.get("motivo", "proposta inexistente"))
         return {"mensagem": res.get("motivo", ""), "resultado": res}
+
+    # --------------------------------------------------------- reconciliação
+    @app.get("/api/reconciliacao")
+    def reconciliacao_estado() -> dict[str, Any]:
+        return {**st.reconciliador.estado(),
+                "aviso": ("Divergência entre o estado local e o da corretora "
+                          "PAUSA a operação. A correção é manual de "
+                          "propósito.")}
+
+    @app.post("/api/reconciliacao/conferir", dependencies=protegido)
+    def reconciliacao_conferir(pausar: bool = True) -> dict[str, Any]:
+        rel = st.reconciliador.conferir(pausar=pausar)
+        return {"resultado": rel.to_dict(), "texto": rel.texto()}
 
     # ------------------------------------------------- comandos operacionais
     @app.get("/api/diagnostico")

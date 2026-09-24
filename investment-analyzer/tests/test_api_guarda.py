@@ -169,3 +169,28 @@ def test_reconciliar_sem_conexao_nao_conclui_nada(cliente):
     assert res["ausentes"] == []
     assert res["exige_atencao"] is True
     assert cliente.estado.store.envio("iai-x")["estado"] == "pendente"
+
+
+# =====================================================================
+# Endpoints da reconciliação
+# =====================================================================
+def test_reconciliacao_comeca_sem_leitura(cliente):
+    corpo = cliente.get("/api/reconciliacao").json()
+    assert corpo["ultimo"] is None
+    assert "PAUSA a operação" in corpo["aviso"]
+
+
+def test_conferir_exige_token(cliente):
+    assert cliente.post("/api/reconciliacao/conferir").status_code in (401, 403)
+
+
+def test_conferir_sem_conexao_nao_diz_coerente(cliente):
+    """Em modo sintético não há corretora para comparar.
+
+    O endpoint tem de dizer NAO_CONFERIDO, nunca COERENTE.
+    """
+    corpo = cliente.post("/api/reconciliacao/conferir",
+                         headers=auth()).json()
+    assert corpo["resultado"]["veredicto"] == "NAO_CONFERIDO"
+    assert corpo["resultado"]["consultou"] is False
+    assert "RECONCILIAÇÃO" in corpo["texto"]

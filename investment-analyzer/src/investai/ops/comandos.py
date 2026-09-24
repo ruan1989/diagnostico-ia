@@ -267,6 +267,28 @@ def diagnostico(estado: Any, *, agora_ms: int | None = None) -> Diagnostico:
         return True, "nenhuma intenção de ordem pendente"
     d.checagens.append(_checar("idempotência de ordens", idem, bloqueia=True))
 
+    # ------------------------------------------------- reconciliação
+    def reconciliacao():
+        rec = getattr(st, "reconciliador", None)
+        if rec is None:
+            return False, "reconciliador não montado neste processo"
+        rel = rec.ultimo
+        if rel is None:
+            return False, ("estado nunca conferido contra a corretora nesta "
+                           "sessão; rode /api/reconciliacao/conferir")
+        if rel.erro:
+            return False, f"última conferência não concluiu: {rel.erro}"
+        if rel.deve_pausar:
+            return False, ("divergência com a corretora: "
+                           + "; ".join(d.detalhe[:80] for d in rel.divergencias
+                                       if d.pausa))
+        if rel.divergencias:
+            return False, (f"{len(rel.divergencias)} divergência(s) menor(es) "
+                           f"com a corretora")
+        return True, (f"estado coerente com a corretora "
+                      f"({rel.posicoes_locais} posição(ões))")
+    d.checagens.append(_checar("reconciliação", reconciliacao, bloqueia=True))
+
     # ---------------------------------------------------------- risco
     def risco():
         r = st.risk.estado
