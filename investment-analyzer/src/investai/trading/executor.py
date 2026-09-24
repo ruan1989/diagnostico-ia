@@ -11,7 +11,14 @@ Proteções embutidas no modo real:
 * o stop-loss vai anexado à ordem de abertura, não em uma segunda chamada;
 * alavancagem e modo de margem são configurados antes de abrir;
 * o executor NUNCA aciona saque ou transferência — a chave de API deve ser
-  criada sem essa permissão.
+  criada sem essa permissão;
+* nenhuma ordem real sai sem passar pela `GuardaFase` (ver `guarda.py`), que
+  confere a fase da estratégia. Aprovação da gestão de risco não basta:
+  risco aprovado em estratégia não validada continua sendo aposta.
+
+As duas travas são independentes de propósito. O risco responde "este tamanho
+cabe?"; a guarda responde "esta estratégia provou que vale a pena?". Uma não
+substitui a outra.
 """
 from __future__ import annotations
 
@@ -24,6 +31,7 @@ from typing import Any, Protocol
 from ..config import ExecutionConfig
 from ..models import Position, Side, Signal, Trade
 from ..risk.manager import DecisaoRisco
+from .guarda import Autorizacao, GuardaFase
 
 log = logging.getLogger("investai.executor")
 
@@ -49,10 +57,15 @@ class ResultadoExecucao:
     mensagem: str
     posicao: Position | None = None
     ordem: dict[str, Any] = field(default_factory=dict)
+    # Veredicto da guarda de fase, quando houve consulta. Fica no resultado
+    # para que o painel e o journal mostrem POR QUE a ordem não saiu, em vez
+    # de apenas "bloqueada".
+    autorizacao: Autorizacao | None = None
 
     def to_dict(self) -> dict:
         return {
             "ok": self.ok, "mensagem": self.mensagem,
+            "autorizacao": self.autorizacao.to_dict() if self.autorizacao else None,
             "posicao": {
                 "symbol": self.posicao.symbol, "side": self.posicao.side.value,
                 "size": self.posicao.size, "entry": self.posicao.entry,
@@ -103,7 +116,8 @@ class Executor:
     """Executa entradas/saídas e gerencia posições abertas."""
 
     def __init__(self, cfg: ExecutionConfig, backend: _TradingBackend | None = None,
-                 modo: str | None = None):
+                 modo: str | None = None, *,
+                 guarda: GuardaFase | None = None):
         self.cfg = cfg
         self.backend = backend
         self.modo = (modo or cfg.modo).lower()
@@ -111,6 +125,9 @@ class Executor:
             raise ValueError(f"modo inválido: {self.modo}")
         if self.modo == "live" and backend is None:
             raise ValueError("modo live exige backend de exchange conectado")
+        # Sem guarda explícita, cria uma sem registro — que nega tudo. O
+        # padrão de um executor recém-construído é não conseguir operar real.
+        self.guarda = guarda if guarda is not None else GuardaFase()
         self._posicoes_papel: dict[str, Position] = {}
 
     @property
@@ -179,6 +196,22 @@ class Executor:
                 True, f"posição simulada aberta em {sinal.symbol} "
                       f"({sinal.side.value}, {size:.6f})", posicao=posicao)
 
+        # ------------------------------------------------- guarda de fase
+        # Última pergunta antes de gastar dinheiro: a estratégia por trás
+        # deste sinal provou algo? A guarda é consultada DEPOIS de montar a
+        # posição (para poder julgar o notional final, já arredondado ao
+        # passo do contrato) e ANTES de qualquer chamada à corretora —
+        # inclusive antes de mexer em alavancagem e margem, que já são
+        # escrita na conta.
+        autorizacao = self.guarda.autorizar(
+            sinal, posicao.notional_usd, client_oid=client_oid, agora_ms=agora)
+        if not autorizacao.liberado:
+            log.warning("ordem real em %s bloqueada pela guarda de fase: %s",
+                        sinal.symbol, autorizacao.motivo)
+            return ResultadoExecucao(
+                False, f"guarda de fase bloqueou: {autorizacao.motivo}",
+                autorizacao=autorizacao)
+
         assert self.backend is not None
         try:
             # Margem isolada limita a perda ao valor alocado naquela posição.
@@ -200,11 +233,13 @@ class Executor:
                 alvo1, client_oid, self.cfg.margin_mode, None)
         except Exception as exc:                        # noqa: BLE001
             log.error("ordem em %s rejeitada: %s", sinal.symbol, exc)
-            return ResultadoExecucao(False, f"ordem rejeitada: {exc}")
+            return ResultadoExecucao(False, f"ordem rejeitada: {exc}",
+                                     autorizacao=autorizacao)
 
         return ResultadoExecucao(
             True, f"ordem enviada para {sinal.symbol} ({sinal.side.value})",
-            posicao=posicao, ordem=ordem if isinstance(ordem, dict) else {})
+            posicao=posicao, ordem=ordem if isinstance(ordem, dict) else {},
+            autorizacao=autorizacao)
 
     # ------------------------------------------------------------------ fechar
     def fechar(self, symbol: str, preco_atual: float, motivo: str,

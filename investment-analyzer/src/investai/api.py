@@ -59,7 +59,7 @@ from .models import Side
 from .passive import carteira_sugerida, provider_padrao, ranquear
 from .risk import RiskManager
 from .store import Store
-from .trading import CONFIRMACAO_LIVE, Executor, TradingEngine
+from .trading import CONFIRMACAO_LIVE, Executor, GuardaFase, TradingEngine
 
 log = logging.getLogger("investai.api")
 
@@ -87,6 +87,15 @@ class Destravar(BaseModel):
 
 class ArmarLive(BaseModel):
     confirmacao: str
+
+
+class VincularEstrategia(BaseModel):
+    chave: str
+
+
+class ConfirmarProposta(BaseModel):
+    client_oid: str
+    motivo: str = ""
 
 
 class CarteiraFii(BaseModel):
@@ -243,8 +252,13 @@ class AppState:
             checar_banco=self._checar_banco,
             checar_risco=lambda: not self.risk_engine.halted,
             checar_noticias=lambda: False)
+        # A guarda de fase compartilha o registro de estratégias com o
+        # pipeline de validação: promover uma estratégia lá muda o que a
+        # guarda autoriza aqui, sem nenhuma sincronização manual.
+        self.guarda = GuardaFase(self.strategies,
+                                 capital_usd=self.settings.exec.capital_inicial_usd)
         self.executor = Executor(self.settings.exec, backend=self.bitget,
-                                 modo="paper")
+                                 modo="paper", guarda=self.guarda)
         self.engine = TradingEngine(self.settings, self.screener, self.executor,
                                     self.risk, self.store)
         self.orquestrador = Orquestrador(
@@ -636,6 +650,55 @@ def criar_app(state: AppState | None = None) -> FastAPI:
             st.store.remover_posicao(req.symbol.upper())
         return {"mensagem": res.mensagem,
                 "trade": trade.to_dict() if trade else None}
+
+    # ------------------------------------------------------- guarda de fase
+    @app.get("/api/guarda")
+    def guarda_estado() -> dict[str, Any]:
+        """O que a guarda de fase autoriza neste instante, e por quê."""
+        return {
+            "guarda": st.guarda.estado(),
+            "propostas_pendentes": st.engine.propostas_pendentes(),
+            "estrategias": [v.to_dict() for v in st.strategies.listar()],
+            "aviso": ("Nenhuma ordem real sai sem uma versão de estratégia "
+                      "vinculada e em fase assistido ou real_limitado. Sem "
+                      "vínculo, o modo real não arma."),
+        }
+
+    @app.post("/api/guarda/vincular", dependencies=protegido)
+    def guarda_vincular(req: VincularEstrategia) -> dict[str, Any]:
+        try:
+            st.guarda.vincular(req.chave)
+        except Exception as exc:                        # noqa: BLE001
+            raise HTTPException(400, str(exc)) from exc
+        st.store.registrar_evento(
+            "ALERTA", "guarda", f"estratégia {req.chave} vinculada ao motor",
+            {"estado": st.guarda.estado()})
+        return {"mensagem": f"{req.chave} vinculada ao motor",
+                "guarda": st.guarda.estado()}
+
+    @app.post("/api/guarda/desvincular", dependencies=protegido)
+    def guarda_desvincular() -> dict[str, Any]:
+        st.guarda.desvincular()
+        st.store.registrar_evento("INFO", "guarda", "estratégia desvinculada")
+        return {"mensagem": "nenhuma estratégia vinculada; o modo real não arma",
+                "guarda": st.guarda.estado()}
+
+    @app.post("/api/guarda/confirmar", dependencies=protegido)
+    def guarda_confirmar(req: ConfirmarProposta) -> dict[str, Any]:
+        """Confirma UMA ordem do modo assistido. Não vale para a próxima."""
+        res = st.engine.confirmar_proposta(req.client_oid)
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("motivo", "confirmação recusada"))
+        return {"mensagem": res.get("motivo", ""), "resultado": res,
+                "status": st.engine.status()}
+
+    @app.post("/api/guarda/recusar", dependencies=protegido)
+    def guarda_recusar(req: ConfirmarProposta) -> dict[str, Any]:
+        res = st.engine.recusar_proposta(
+            req.client_oid, req.motivo or "recusada pelo operador")
+        if not res.get("ok"):
+            raise HTTPException(400, res.get("motivo", "proposta inexistente"))
+        return {"mensagem": res.get("motivo", ""), "resultado": res}
 
     @app.post("/api/risco/rearmar", dependencies=protegido)
     def risco_rearmar() -> dict[str, Any]:
