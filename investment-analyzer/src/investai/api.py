@@ -36,6 +36,7 @@ from .assets import (
 )
 from .backtest.engine import rodar_backtest
 from .data import AssetClass, DataKind, registry_padrao
+from .ml import ModelRegistry
 from .ops import monitor_padrao
 from .ops.comandos import (
     TravaOperacao, diagnostico, liberar_trava, parada_emergencia,
@@ -266,7 +267,11 @@ class AppState:
         self.risk_engine = RiskEngine(
             self.settings.risk, self.settings.exec.capital_inicial_usd,
             manager=self.risk)
-        self.chief = ChiefInvestmentEngine()
+        # Registro de modelos de probabilidade. O agente de ML só é montado
+        # quando ele existe, e mesmo assim só fala quando há modelo em
+        # produção calibrado para aquele par — ver `agentes_padrao`.
+        self.modelos = ModelRegistry()
+        self.chief = ChiefInvestmentEngine(registro_modelos=self.modelos)
         self.alertas = CentralDeAlertas()
         self.journal = Journal()
         self.strategies = StrategyRegistry()

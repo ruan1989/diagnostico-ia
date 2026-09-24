@@ -130,13 +130,36 @@ class Consenso:
         }
 
 
+def agentes_padrao_lazy(registro_modelos):
+    from .especialistas import agentes_padrao
+    return agentes_padrao(registro_modelos)
+
+
 class ChiefInvestmentEngine:
     def __init__(self, agentes: Sequence[AgenteBase] | None = None,
-                 criterios: CriteriosConsenso | None = None):
+                 criterios: CriteriosConsenso | None = None, *,
+                 registro_modelos=None):
         from .especialistas import agentes_padrao
-        self.agentes = list(agentes) if agentes else agentes_padrao()
+        self._agentes_fixos = list(agentes) if agentes else None
+        self.registro_modelos = registro_modelos
+        self.agentes = (self._agentes_fixos if self._agentes_fixos
+                        else agentes_padrao(registro_modelos))
         self.criterios = criterios or CriteriosConsenso()
         self.peso_nominal_total = sum(a.peso for a in self.agentes)
+
+    def recarregar_agentes(self) -> list[str]:
+        """Remonta o painel de agentes. Chamado quando um modelo é promovido.
+
+        O agente de ML entra e sai conforme existir modelo em produção, e o
+        peso nominal total precisa acompanhar — senão a cobertura passaria a
+        ser medida contra um denominador que não corresponde aos agentes que
+        de fato rodaram.
+        """
+        if self._agentes_fixos:
+            return [a.nome for a in self.agentes]
+        self.agentes = agentes_padrao_lazy(self.registro_modelos)
+        self.peso_nominal_total = sum(a.peso for a in self.agentes)
+        return [a.nome for a in self.agentes]
 
     # -------------------------------------------------------------- análise
     def consultar(self, ctx: ContextoAnalise,

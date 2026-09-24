@@ -655,10 +655,22 @@ class AgenteLiquidez(AgenteBase):
                                        "spread_pct": spread})
 
 
-def agentes_padrao() -> list[AgenteBase]:
-    """Conjunto completo. O agente de risco NÃO está aqui: ele veta, não pontua."""
-    return [
+def agentes_padrao(registro_modelos=None) -> list[AgenteBase]:
+    """Conjunto completo. O agente de risco NÃO está aqui: ele veta, não pontua.
+
+    O agente de ML só entra quando o registro tem modelo em produção, e não
+    por estar disponível. A cobertura do consenso é medida como fração do
+    PESO NOMINAL disponível: um agente de peso 0,18 que se absteria sempre —
+    porque não há modelo treinado — derrubaria a cobertura em 18 pontos e
+    faria o sistema reprovar análises que hoje passam. Incluí-lo "para ficar
+    completo" tornaria o sistema pior, não mais capaz.
+    """
+    agentes: list[AgenteBase] = [
         AgenteTecnico(), AgenteQuantitativo(), AgenteFundamentos(),
         AgenteDerivativos(), AgenteMacro(), AgenteNoticias(),
         AgenteLiquidez(),
     ]
+    if registro_modelos is not None and registro_modelos.tem_producao():
+        from .ml import AgenteML
+        agentes.append(AgenteML(registro_modelos.buscador()))
+    return agentes

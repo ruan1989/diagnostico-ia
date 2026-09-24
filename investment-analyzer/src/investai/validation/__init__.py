@@ -1,3 +1,7 @@
+from .calibracao import (
+    Brier, Faixa, ModeloCalibrado, RelatorioCalibracao, avaliar_calibracao,
+    calcular_brier, recalibrar_isotonico,
+)
 from .montecarlo import (
     DistribuicaoMC, RelatorioMonteCarlo, comparar_modos, monte_carlo,
 )
@@ -16,6 +20,8 @@ from .walkforward import (
 )
 
 __all__ = [
+    "Brier", "Faixa", "ModeloCalibrado", "RelatorioCalibracao",
+    "avaliar_calibracao", "calcular_brier", "recalibrar_isotonico",
     "DistribuicaoMC", "ExpectedValue", "IntervaloConfianca", "Janela",
     "RelatorioMonteCarlo", "RelatorioOverfit", "RelatorioWalkForward",
     "ResultadoJanela", "SinalOverfit", "SplitError", "SplitTemporal",
