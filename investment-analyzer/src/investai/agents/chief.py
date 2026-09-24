@@ -104,6 +104,10 @@ class Consenso:
     nao_aplicaveis: list[str] = field(default_factory=list)
     motivos_decisao: list[str] = field(default_factory=list)
     risco: DecisaoRiskEngine | None = None
+    # Quanta da evidência acima é independente. None quando não há histórico
+    # suficiente para medir — e nesse caso o consenso funciona igual, só sem
+    # reportar redundância.
+    redundancia: Any = None
 
     @property
     def operavel(self) -> bool:
@@ -115,6 +119,8 @@ class Consenso:
             "score": round(self.score, 2), "faixa": self.faixa,
             "decisao": self.decisao.value, "operavel": self.operavel,
             "cobertura": round(self.cobertura, 3),
+            "redundancia": (self.redundancia.to_dict()
+                            if self.redundancia is not None else None),
             "n_participando": self.n_participando,
             "n_concordantes": self.n_concordantes,
             "n_divergentes": self.n_divergentes,
@@ -138,7 +144,7 @@ def agentes_padrao_lazy(registro_modelos):
 class ChiefInvestmentEngine:
     def __init__(self, agentes: Sequence[AgenteBase] | None = None,
                  criterios: CriteriosConsenso | None = None, *,
-                 registro_modelos=None):
+                 registro_modelos=None, historico_opinioes=None):
         from .especialistas import agentes_padrao
         self._agentes_fixos = list(agentes) if agentes else None
         self.registro_modelos = registro_modelos
@@ -146,6 +152,10 @@ class ChiefInvestmentEngine:
                         else agentes_padrao(registro_modelos))
         self.criterios = criterios or CriteriosConsenso()
         self.peso_nominal_total = sum(a.peso for a in self.agentes)
+        # Histórico das opiniões, para medir quanta evidência é de fato
+        # independente. Opcional: sem ele o consenso funciona igual, só não
+        # reporta redundância.
+        self.historico_opinioes = historico_opinioes
 
     def recarregar_agentes(self) -> list[str]:
         """Remonta o painel de agentes. Chamado quando um modelo é promovido.
@@ -198,6 +208,18 @@ class ChiefInvestmentEngine:
 
         participando = [p for p in ps if p.entra_no_calculo]
         peso_efetivo_total = sum(p.peso_efetivo for p in participando)
+
+        # ------------------------------------------------- redundância
+        # Registra as opiniões desta rodada e mede quanta evidência é
+        # independente. Só entram rodadas em que todos os participantes
+        # opinaram: séries desalinhadas correlacionariam coisas diferentes.
+        redundancia = None
+        if self.historico_opinioes is not None and participando:
+            self.historico_opinioes.registrar(
+                {p.agente: p.valor for p in participando})
+            redundancia = self.historico_opinioes.avaliar(
+                {p.agente: p.peso_base for p in participando},
+                fontes=[p.agente for p in participando])
         # Cobertura é medida sobre o peso NOMINAL dos agentes que puderam
         # opinar — não sobre o peso efetivo, que já desconta confiança.
         peso_nominal_disponivel = sum(p.peso_base for p in participando)
@@ -235,7 +257,19 @@ class ChiefInvestmentEngine:
             n_concordantes=len(concordantes), n_divergentes=len(divergentes),
             pareceres=ps, fatores_favoraveis=favoraveis,
             fatores_contrarios=contrarios, dados_faltando=faltando,
-            nao_aplicaveis=nao_aplicaveis, risco=risco)
+            nao_aplicaveis=nao_aplicaveis, risco=risco,
+            redundancia=redundancia)
+
+        # A redundância NÃO desconta o score em silêncio: ela aparece como
+        # contraindicação, para que o número continue reproduzível na mão.
+        if redundancia is not None and redundancia.material:
+            consenso.fatores_contrarios.append(
+                f"[redundância] apenas {redundancia.fator:.0%} do peso "
+                f"analítico é independente: "
+                + (f"{' e '.join('+'.join(g) for g in redundancia.grupos)} "
+                   f"se movem juntos"
+                   if redundancia.grupos else
+                   "as fontes se movem juntas"))
 
         consenso.decisao = self._decidir(consenso, ctx, risco)
         return consenso

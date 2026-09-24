@@ -12,3 +12,13 @@ __all__ = [
     "avaliar", "classificar", "classificar_regime", "extrair_features",
     "melhor_direcao", "montar_plano", "prob_acerto_ajustada",
 ]
+from .redundancia import (
+    FATOR_ALERTA, LIMIAR_REDUNDANCIA, MIN_OBSERVACOES, HistoricoOpinioes,
+    RelatorioRedundancia, avaliar_redundancia, correlacao,
+)
+
+__all__ += [
+    "FATOR_ALERTA", "HistoricoOpinioes", "LIMIAR_REDUNDANCIA",
+    "MIN_OBSERVACOES", "RelatorioRedundancia", "avaliar_redundancia",
+    "correlacao",
+]

@@ -36,6 +36,7 @@ from .assets import (
 )
 from .backtest.engine import rodar_backtest
 from .data import AssetClass, DataKind, registry_padrao
+from .analysis.redundancia import HistoricoOpinioes
 from .ml import ModelRegistry
 from .ops import monitor_padrao
 from .ops.comandos import (
@@ -271,7 +272,13 @@ class AppState:
         # quando ele existe, e mesmo assim só fala quando há modelo em
         # produção calibrado para aquele par — ver `agentes_padrao`.
         self.modelos = ModelRegistry()
-        self.chief = ChiefInvestmentEngine(registro_modelos=self.modelos)
+        # Histórico de opiniões dos agentes, para medir quanta evidência é
+        # independente. Acumula ao longo dos ciclos: com poucas rodadas a
+        # redundância não é mensurável e o relatório diz isso.
+        self.historico_opinioes = HistoricoOpinioes()
+        self.chief = ChiefInvestmentEngine(
+            registro_modelos=self.modelos,
+            historico_opinioes=self.historico_opinioes)
         self.alertas = CentralDeAlertas()
         self.journal = Journal()
         self.strategies = StrategyRegistry()
