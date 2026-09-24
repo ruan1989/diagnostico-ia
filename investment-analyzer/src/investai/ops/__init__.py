@@ -21,3 +21,14 @@ __all__ = [
     "ResultadoShadow", "Severidade", "ShadowRunner", "TipoAnomalia",
     "detectar_anomalias", "detectar_regime", "monitor_padrao",
 ]
+from .comandos import (
+    CHAVE_TRAVA, SAIDA_AVISO, SAIDA_BLOQUEIO, SAIDA_OK, Checagem, Diagnostico,
+    Trava, TravaOperacao, diagnostico, liberar_trava, parada_emergencia,
+    status, status_texto,
+)
+
+__all__ += [
+    "CHAVE_TRAVA", "Checagem", "Diagnostico", "SAIDA_AVISO", "SAIDA_BLOQUEIO",
+    "SAIDA_OK", "Trava", "TravaOperacao", "diagnostico", "liberar_trava",
+    "parada_emergencia", "status", "status_texto",
+]

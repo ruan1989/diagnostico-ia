@@ -38,7 +38,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from ..models import Signal
 from ..strategies.registry import ORDEM, Fase, StrategyRegistry
@@ -114,10 +114,15 @@ class GuardaFase:
 
     def __init__(self, registry: StrategyRegistry | None = None, *,
                  capital_usd: float = 0.0,
-                 validade_confirmacao_s: float = 300.0):
+                 validade_confirmacao_s: float = 300.0,
+                 trava: Callable[[], tuple[bool, str]] | None = None):
         self.registry = registry
         self.capital_usd = max(0.0, capital_usd)
         self.validade_confirmacao_s = validade_confirmacao_s
+        # Consulta à parada de emergência. Recebida como função, e não como
+        # objeto, para que este módulo não dependa da camada de operação —
+        # a trava precisa poder ser lida de onde ela estiver guardada.
+        self._trava = trava
         self._chave: str | None = None
         self._confirmacoes: dict[str, _Confirmacao] = {}
 
@@ -195,6 +200,26 @@ class GuardaFase:
                   agora_ms: int | None = None) -> Autorizacao:
         """Decide se esta ordem real pode sair. Padrão: não."""
         agora = agora_ms if agora_ms is not None else int(time.time() * 1000)
+
+        # A parada de emergência vem antes de tudo. Ela existe justamente
+        # para os momentos em que o resto do sistema está errado, então não
+        # pode depender de nenhuma outra checagem ter dado certo.
+        if self._trava is not None:
+            try:
+                travada, motivo = self._trava()
+            except Exception as exc:                    # noqa: BLE001
+                # Não conseguir ler a trava é motivo para não operar. Na
+                # dúvida sobre se alguém pediu parada, não se envia ordem.
+                return Autorizacao(
+                    False, f"não foi possível ler a trava de operação ({exc}); "
+                           f"ordem real bloqueada por precaução",
+                    client_oid=client_oid)
+            if travada:
+                return Autorizacao(
+                    False, f"PARADA DE EMERGÊNCIA ativa: "
+                           f"{motivo or 'sem motivo registrado'}. Libere a "
+                           f"trava explicitamente antes de operar",
+                    client_oid=client_oid)
 
         if self.registry is None:
             return Autorizacao(
@@ -278,7 +303,15 @@ class GuardaFase:
                 }
             except Exception:                           # noqa: BLE001
                 versao = None
+        travada, motivo_trava = False, ""
+        if self._trava is not None:
+            try:
+                travada, motivo_trava = self._trava()
+            except Exception as exc:                    # noqa: BLE001
+                travada, motivo_trava = True, f"trava ilegível: {exc}"
         return {
+            "trava_ativa": travada,
+            "trava_motivo": motivo_trava,
             "chave_vinculada": self._chave,
             "versao": versao,
             "capital_usd": round(self.capital_usd, 2),

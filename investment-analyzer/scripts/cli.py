@@ -8,6 +8,9 @@ Exemplos:
     python scripts/cli.py fiis
     python scripts/cli.py carteira --capital 50000
     python scripts/cli.py validar          # roda backtest no universo inteiro
+    python scripts/cli.py status           # o que esta acontecendo agora
+    python scripts/cli.py diagnostico      # o que esta quebrado, e o que impede
+    python scripts/cli.py parar-tudo       # parada de emergencia com trava
 """
 from __future__ import annotations
 
@@ -423,6 +426,72 @@ def cmd_carteira(args: argparse.Namespace) -> int:
     return 0
 
 
+def _estado_operacional(args: argparse.Namespace):
+    """Monta o AppState real — o mesmo que o painel usa.
+
+    Importado aqui, e não no topo, porque construir o estado abre o banco e
+    inicializa a camada de dados. Um `cli.py scan` não deve pagar isso.
+    """
+    from investai.api import AppState
+    sintetico = (getattr(args, "sintetico", False)
+                 or os.environ.get("INVESTAI_SYNTHETIC") == "1")
+    return AppState(usar_sintetico=bool(sintetico))
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    from investai.ops.comandos import status, status_texto
+    st = _estado_operacional(args)
+    s = status(st)
+    print(json.dumps(s, ensure_ascii=False, indent=2, default=str)
+          if args.json else status_texto(s))
+    # Código de saída diz se há algo exigindo atenção, para uso em cron.
+    if s["trava_operacao"]["ativa"] or s["envios_pendentes"]:
+        return 2
+    return 0
+
+
+def cmd_diagnostico(args: argparse.Namespace) -> int:
+    """Códigos de saída: 0 tudo certo, 1 bloqueio, 2 apenas avisos."""
+    from investai.ops.comandos import diagnostico
+    st = _estado_operacional(args)
+    d = diagnostico(st)
+    print(json.dumps(d.to_dict(), ensure_ascii=False, indent=2)
+          if args.json else d.texto())
+    return d.codigo_saida
+
+
+def cmd_parar_tudo(args: argparse.Namespace) -> int:
+    """Parada de emergência: trava, desarma, para o motor e fecha posições."""
+    from investai.ops.comandos import parada_emergencia
+    if not args.sim:
+        print("Este comando FECHA todas as posições a mercado e TRAVA novos "
+              "envios.\nA trava sobrevive a reinício e só sai com "
+              "'liberar-operacao'.\nConfirme com --sim.", file=sys.stderr)
+        return 1
+    st = _estado_operacional(args)
+    res = parada_emergencia(st, args.motivo,
+                            fechar_posicoes=not args.manter_posicoes)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
+    else:
+        for passo in res["passos"]:
+            print(f"- {passo}")
+        print(res["mensagem"])
+    return 0 if res["ok"] else 1
+
+
+def cmd_liberar_operacao(args: argparse.Namespace) -> int:
+    from investai.ops.comandos import liberar_trava
+    if not args.sim:
+        print("Religar exige --sim. Antes disso, rode 'diagnostico' e confira "
+              "as posições na Bitget.", file=sys.stderr)
+        return 1
+    st = _estado_operacional(args)
+    res = liberar_trava(st)
+    print(res["mensagem"])
+    return 0
+
+
 def construir() -> argparse.ArgumentParser:
     """Monta o parser. Separado de `main` para que os testes possam invocar
     um subcomando sem passar pela configuração de log e pelo sys.exit."""
@@ -460,6 +529,32 @@ def construir() -> argparse.ArgumentParser:
                     help="tentativas por endpoint (menos = diagnóstico mais "
                          "rápido quando a rede está fora)")
     cb.set_defaults(func=cmd_conferir_bitget)
+
+    stt = sub.add_parser("status", help="o que o sistema esta fazendo agora")
+    stt.add_argument("--json", action="store_true")
+    stt.set_defaults(func=cmd_status)
+
+    dg = sub.add_parser(
+        "diagnostico",
+        help="confere o sistema inteiro (saida 0 ok, 1 bloqueio, 2 avisos)")
+    dg.add_argument("--json", action="store_true")
+    dg.set_defaults(func=cmd_diagnostico)
+
+    pt = sub.add_parser("parar-tudo",
+                        help="parada de emergencia: trava e fecha posicoes")
+    pt.add_argument("--sim", action="store_true",
+                    help="confirma a parada (obrigatorio)")
+    pt.add_argument("--motivo", default="comando de emergencia pela linha de comando")
+    pt.add_argument("--manter-posicoes", dest="manter_posicoes",
+                    action="store_true",
+                    help="trava novos envios mas nao fecha o que esta aberto")
+    pt.add_argument("--json", action="store_true")
+    pt.set_defaults(func=cmd_parar_tudo)
+
+    lo = sub.add_parser("liberar-operacao",
+                        help="remove a trava deixada por uma parada")
+    lo.add_argument("--sim", action="store_true")
+    lo.set_defaults(func=cmd_liberar_operacao)
 
     f = sub.add_parser("fiis", help="ranking de FIIs para renda passiva")
     f.set_defaults(func=cmd_fiis)

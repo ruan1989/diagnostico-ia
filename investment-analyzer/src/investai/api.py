@@ -37,6 +37,10 @@ from .assets import (
 from .backtest.engine import rodar_backtest
 from .data import AssetClass, DataKind, registry_padrao
 from .ops import monitor_padrao
+from .ops.comandos import (
+    TravaOperacao, diagnostico, liberar_trava, parada_emergencia,
+    status as status_operacional, status_texto as status_texto_fn,
+)
 from .ops.shadow_live import ShadowLive
 from .orquestrador import Orquestrador
 from .portfolio import (
@@ -66,6 +70,11 @@ from .trading import (
 
 log = logging.getLogger("investai.api")
 
+# Frase exigida para religar o sistema depois de uma parada de emergência.
+# Mesma lógica de armar o modo real: religar às pressas o que foi parado às
+# pressas não deve ser um clique distraído.
+CONFIRMACAO_LIBERAR = "LIBERAR OPERACAO"
+
 AVISO_PADRAO = (
     "Este sistema calcula probabilidades a partir de dados históricos. "
     "Não existe entrada com acerto garantido em mercado futuro: qualquer "
@@ -94,6 +103,18 @@ class ArmarLive(BaseModel):
 
 class VincularEstrategia(BaseModel):
     chave: str
+
+
+class ParadaEmergencia(BaseModel):
+    motivo: str = "comando de emergência pelo painel"
+    fechar_posicoes: bool = True
+
+
+class LiberarTrava(BaseModel):
+    # A liberação exige a frase, pelo mesmo motivo que armar o modo real
+    # exige: religar um sistema que foi parado às pressas não deve ser um
+    # clique distraído.
+    confirmacao: str
 
 
 class ConfirmarProposta(BaseModel):
@@ -258,8 +279,14 @@ class AppState:
         # A guarda de fase compartilha o registro de estratégias com o
         # pipeline de validação: promover uma estratégia lá muda o que a
         # guarda autoriza aqui, sem nenhuma sincronização manual.
-        self.guarda = GuardaFase(self.strategies,
-                                 capital_usd=self.settings.exec.capital_inicial_usd)
+        # Parada de emergência: gravada no banco, lida pela guarda em cada
+        # ordem. Sobrevive a reinício de propósito — uma parada que se perde
+        # no restart é uma pausa, não uma parada.
+        self.trava = TravaOperacao(self.store)
+        self.guarda = GuardaFase(
+            self.strategies,
+            capital_usd=self.settings.exec.capital_inicial_usd,
+            trava=self._ler_trava)
         # Controle de idempotência ligado ao banco: sobrevive a reinício do
         # processo, que é exatamente o caso que ele existe para resolver.
         self.idempotencia = ControleIdempotencia(self.store, self.bitget)
@@ -359,6 +386,11 @@ class AppState:
                                margin_coin=self.settings.exec.margin_coin)
         self.bitget = cliente
         return cliente
+
+    def _ler_trava(self) -> tuple[bool, str]:
+        """Estado da parada de emergência, no formato que a guarda espera."""
+        t = self.trava.ler()
+        return t.ativa, t.motivo
 
     def conectar(self, cred: ApiCredentials) -> dict[str, Any]:
         """Anexa credenciais ao cliente e valida contra a exchange."""
@@ -722,6 +754,32 @@ def criar_app(state: AppState | None = None) -> FastAPI:
         if not res.get("ok"):
             raise HTTPException(400, res.get("motivo", "proposta inexistente"))
         return {"mensagem": res.get("motivo", ""), "resultado": res}
+
+    # ------------------------------------------------- comandos operacionais
+    @app.get("/api/diagnostico")
+    def diagnostico_endpoint() -> dict[str, Any]:
+        """Confere o sistema inteiro e diz o que cada falha impede."""
+        d = diagnostico(st)
+        return {**d.to_dict(), "texto": d.texto()}
+
+    @app.get("/api/operacao/status")
+    def status_operacional_endpoint() -> dict[str, Any]:
+        s_op = status_operacional(st)
+        return {**s_op, "texto": status_texto_fn(s_op)}
+
+    @app.post("/api/operacao/parada-emergencia", dependencies=protegido)
+    def parada_emergencia_endpoint(req: ParadaEmergencia) -> dict[str, Any]:
+        """Para tudo e trava novos envios. A trava sobrevive a reinício."""
+        return parada_emergencia(st, req.motivo,
+                                 fechar_posicoes=req.fechar_posicoes)
+
+    @app.post("/api/operacao/liberar-trava", dependencies=protegido)
+    def liberar_trava_endpoint(req: LiberarTrava) -> dict[str, Any]:
+        if req.confirmacao.strip().upper() != CONFIRMACAO_LIBERAR:
+            raise HTTPException(
+                400, f"envie exatamente '{CONFIRMACAO_LIBERAR}' para liberar "
+                     f"a trava de operação")
+        return liberar_trava(st)
 
     # ------------------------------------------------------- idempotência
     @app.get("/api/envios")
