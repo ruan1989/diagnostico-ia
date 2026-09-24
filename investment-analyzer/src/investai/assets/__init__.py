@@ -18,3 +18,15 @@ __all__ = [
     "aliquota_ir", "analisar_acao", "analisar_etf", "analisar_titulo",
     "comparar", "comparar_etfs", "comparar_titulos",
 ]
+from .universo import (
+    CICLOS_PARA_READMITIR, CICLOS_PARA_REMOVER, FUNDING_MAXIMO_ABS,
+    SPREAD_MAXIMO_PCT, VOLUME_MINIMO_USD, Avaliacao, EstadoAtivo,
+    GestorUniverso, LeituraAtivo, RelatorioUniverso, avaliar as avaliar_ativo,
+)
+
+__all__ += [
+    "Avaliacao", "CICLOS_PARA_READMITIR", "CICLOS_PARA_REMOVER",
+    "EstadoAtivo", "FUNDING_MAXIMO_ABS", "GestorUniverso", "LeituraAtivo",
+    "RelatorioUniverso", "SPREAD_MAXIMO_PCT", "VOLUME_MINIMO_USD",
+    "avaliar_ativo",
+]
