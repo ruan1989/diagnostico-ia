@@ -25,3 +25,15 @@ __all__ = [
     "alerta_qualidade_dados", "alerta_regime", "alerta_risco", "alerta_saude",
     "alerta_stop", "analisar_pos_trade", "montar_relatorio",
 ]
+from .segmentado import (
+    DESCRICAO_ORIGEM, MIN_SEGMENTO, REALISMO, Metrica, Origem,
+    OrigemMisturada, RelatorioSegmentado, TradeAnotado, agregar, calcular,
+    comparar_grupos, comparar_origens, separar_por_origem,
+)
+
+__all__ += [
+    "DESCRICAO_ORIGEM", "MIN_SEGMENTO", "Metrica", "Origem",
+    "OrigemMisturada", "REALISMO", "RelatorioSegmentado", "TradeAnotado",
+    "agregar", "calcular", "comparar_grupos", "comparar_origens",
+    "separar_por_origem",
+]
