@@ -32,3 +32,15 @@ __all__ += [
     "SAIDA_OK", "Trava", "TravaOperacao", "diagnostico", "liberar_trava",
     "parada_emergencia", "status", "status_texto",
 ]
+from .drift import (
+    MIN_JANELA, MIN_TRADES, PSI_ESTAVEL, PSI_MODERADO, Achado,
+    RelatorioDrift, avaliar_drift, drift_de_conceito, drift_de_dado,
+    drift_de_performance, drift_de_regime, piso_ruido_ece, psi, sigma_skill,
+)
+
+__all__ += [
+    "Achado", "MIN_JANELA", "MIN_TRADES", "PSI_ESTAVEL", "PSI_MODERADO",
+    "RelatorioDrift", "avaliar_drift", "drift_de_conceito", "drift_de_dado",
+    "drift_de_performance", "drift_de_regime", "piso_ruido_ece", "psi",
+    "sigma_skill",
+]
