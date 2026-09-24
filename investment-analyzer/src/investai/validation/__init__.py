@@ -2,6 +2,12 @@ from .calibracao import (
     Brier, Faixa, ModeloCalibrado, RelatorioCalibracao, avaliar_calibracao,
     calcular_brier, recalibrar_isotonico,
 )
+from .leakage import (
+    FATOR_SENTINELA, RelatorioLeakage, Violacao, auditar_divisao_temporal,
+    auditar_invariancia_de_prefixo, auditar_ordem_temporal,
+    auditar_padronizacao, auditar_rotulagem, auditar_sentinela,
+    juntar as juntar_leakage,
+)
 from .montecarlo import (
     DistribuicaoMC, RelatorioMonteCarlo, comparar_modos, monte_carlo,
 )
@@ -20,6 +26,10 @@ from .walkforward import (
 )
 
 __all__ = [
+    "FATOR_SENTINELA", "RelatorioLeakage", "Violacao",
+    "auditar_divisao_temporal", "auditar_invariancia_de_prefixo",
+    "auditar_ordem_temporal", "auditar_padronizacao", "auditar_rotulagem",
+    "auditar_sentinela", "juntar_leakage",
     "Brier", "Faixa", "ModeloCalibrado", "RelatorioCalibracao",
     "avaliar_calibracao", "calcular_brier", "recalibrar_isotonico",
     "DistribuicaoMC", "ExpectedValue", "IntervaloConfianca", "Janela",

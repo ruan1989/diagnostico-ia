@@ -108,3 +108,71 @@ jobs:
           s.validar()
           print('configuração padrão consistente')
           "
+
+  vazamento:
+    name: auditoria de lookahead
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            investment-analyzer/requirements.txt
+            investment-analyzer/requirements-dev.txt
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Auditar o caminho de features e rótulos
+        # Lookahead é o defeito mais caro deste sistema e o mais fácil de
+        # introduzir sem perceber: uma fatia com um índice a mais produz
+        # backtest excelente e conta vazia. Revisão de código não pega isso de
+        # forma confiável; a prova de invariância de prefixo pega.
+        #
+        # Job separado da suíte de propósito: quando ele falha, a causa é
+        # sempre a mesma e a correção é urgente, e isso tem de ficar visível
+        # na lista de checks sem alguém precisar abrir o log do pytest.
+        run: |
+          PYTHONPATH=src python -c "
+          import sys
+          from investai.exchanges import SyntheticProvider
+          from investai.analysis.features import SerieFeatures, extrair_features
+          from investai.ml.amostras import rotular
+          from investai.models import Side
+          from investai.validation.leakage import (
+              auditar_invariancia_de_prefixo, auditar_rotulagem,
+              auditar_ordem_temporal, auditar_sentinela, juntar)
+
+          velas = SyntheticProvider(seed=5, agora_ms=1726000000000).candles(
+              'BTCUSDT', '1H', limit=1500)
+
+          def serie_at(vs, i):
+              return SerieFeatures('BTCUSDT', '1H', vs).at(i)
+
+          def extrai(vs, i):
+              return extrair_features('BTCUSDT', '1H', vs, indice=i)
+
+          def rot(vs, i):
+              e = vs[i].close
+              return rotular(vs, i, side=Side.LONG, entry=e, stop=e * 0.98,
+                             alvo=e * 1.04, max_barras=48)
+
+          total = juntar(
+              auditar_invariancia_de_prefixo(serie_at, velas, alvo='SerieFeatures'),
+              auditar_sentinela(serie_at, velas, alvo='SerieFeatures'),
+              auditar_invariancia_de_prefixo(extrai, velas, alvo='extrair_features'),
+              auditar_sentinela(extrai, velas, alvo='extrair_features'),
+              auditar_rotulagem(rot, velas, horizonte=48, alvo='rotular'),
+              auditar_ordem_temporal([c.ts for c in velas], alvo='provider'),
+          )
+          print(total.texto())
+          if total.veredicto != 'LIMPO':
+              sys.exit(1)
+          "
