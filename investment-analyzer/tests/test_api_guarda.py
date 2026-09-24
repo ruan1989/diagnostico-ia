@@ -80,7 +80,7 @@ def test_guarda_mostra_o_que_falta_para_fase_baixa(cliente):
     cliente.post("/api/guarda/vincular", headers=auth(), json={"chave": chave})
     corpo = cliente.get("/api/guarda").json()
     assert corpo["guarda"]["versao"]["faltam_fases"] == [
-        "out_of_sample", "paper_trading", "shadow", "assistido",
+        "out_of_sample", "paper_trading", "shadow", "demo", "assistido",
         "real_limitado"]
     assert corpo["guarda"]["versao"]["operavel_real"] is False
 

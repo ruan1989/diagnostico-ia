@@ -21,6 +21,9 @@ from ..models import Candle, MarketSnapshot, Position, Side
 from .base import (
     ExchangeError, ExchangeUnreachable, InsufficientPermissions,
 )
+from .ambiente import (
+    Ambiente, cabecalhos_de, do_demo, product_type_de, traduzir,
+)
 from .keystore import ApiCredentials
 
 log = logging.getLogger("investai.bitget")
@@ -76,16 +79,47 @@ class BitgetClient:
                  base_url: str = BASE_URL,
                  timeout: float = 15.0,
                  max_tentativas: int = 4,
-                 client: httpx.Client | None = None):
+                 client: httpx.Client | None = None,
+                 ambiente: Ambiente = Ambiente.REAL):
         self.cred = credenciais
-        self.product_type = product_type
+        self.ambiente = ambiente
+        # O productType já entra traduzido. Guardar o valor do ambiente
+        # errado seria o tipo de bug que só aparece em produção: consultas
+        # respondendo "conta vazia" porque estão perguntando pela conta de
+        # outro ambiente.
+        self.product_type = product_type_de(product_type, ambiente)
         self.margin_coin = margin_coin
         self.base_url = base_url.rstrip("/")
         self.max_tentativas = max_tentativas
+        cabecalhos = {"Content-Type": "application/json", "locale": "pt-BR"}
+        cabecalhos.update(cabecalhos_de(ambiente))
         self._client = client or httpx.Client(
-            base_url=self.base_url, timeout=timeout,
-            headers={"Content-Type": "application/json", "locale": "pt-BR"},
+            base_url=self.base_url, timeout=timeout, headers=cabecalhos,
         )
+
+    # ------------------------------------------------------------- ambiente
+    @property
+    def e_demo(self) -> bool:
+        return self.ambiente.e_demo
+
+    def _sym(self, symbol: str) -> str:
+        """Símbolo no formato do ambiente ativo.
+
+        Toda chamada que manda símbolo passa por aqui. Espalhar a tradução
+        pelos métodos deixaria um esquecido, e um símbolo não traduzido no
+        demo devolve "par não existe" — ou, no sentido contrário, envia ao
+        par REAL achando que era demo.
+        """
+        return traduzir(symbol.upper(), self.ambiente, self.margin_coin)
+
+    def _sym_local(self, symbol: str) -> str:
+        """O caminho de volta: símbolo da corretora para o nome interno.
+
+        Sem ele, a reconciliação compararia `SBTCSUSDT` com `BTCUSDT` e
+        acusaria posição fantasma em todo ciclo.
+        """
+        return do_demo(symbol.upper(), self.margin_coin) if self.e_demo \
+            else symbol.upper()
 
     # ------------------------------------------------------------------ infra
     @property
@@ -185,7 +219,7 @@ class BitgetClient:
         if timeframe not in GRANULARIDADE:
             raise ValueError(f"timeframe não suportado pela Bitget: {timeframe}")
         data = self._request("GET", "/api/v2/mix/market/candles", params={
-            "symbol": symbol,
+            "symbol": self._sym(symbol),
             "productType": self.product_type,
             "granularity": GRANULARIDADE[timeframe],
             "limit": min(int(limit), 1000),
@@ -201,7 +235,7 @@ class BitgetClient:
 
     def ticker(self, symbol: str) -> MarketSnapshot:
         data = self._request("GET", "/api/v2/mix/market/ticker", params={
-            "symbol": symbol, "productType": self.product_type}) or []
+            "symbol": self._sym(symbol), "productType": self.product_type}) or []
         item = data[0] if isinstance(data, list) and data else (data or {})
         return self._snapshot(item, symbol)
 
@@ -212,12 +246,16 @@ class BitgetClient:
         for item in data:
             sym = item.get("symbol", "")
             if sym:
-                out[sym] = self._snapshot(item, sym)
+                local = self._sym_local(sym)
+                out[local] = self._snapshot(item, sym)
         return out
 
     def _snapshot(self, item: Mapping[str, Any], symbol: str) -> MarketSnapshot:
+        # O snapshot carrega o nome INTERNO, não o da corretora. Devolver
+        # `SBTCSUSDT` para o resto do sistema faria o painel, o risco e a
+        # reconciliação falarem de um par que não existe no universo.
         return MarketSnapshot(
-            symbol=symbol,
+            symbol=self._sym_local(symbol),
             last_price=_f(item.get("lastPr") or item.get("last")),
             funding_rate=_f(item.get("fundingRate")),
             open_interest=_f(item.get("holdingAmount") or item.get("openInterest")),
@@ -227,7 +265,7 @@ class BitgetClient:
 
     def funding_rate(self, symbol: str) -> float:
         data = self._request("GET", "/api/v2/mix/market/current-fund-rate", params={
-            "symbol": symbol, "productType": self.product_type}) or []
+            "symbol": self._sym(symbol), "productType": self.product_type}) or []
         item = data[0] if isinstance(data, list) and data else (data or {})
         return _f(item.get("fundingRate"))
 
@@ -235,19 +273,19 @@ class BitgetClient:
         data = self._request("GET", "/api/v2/mix/market/contracts", params={
             "productType": self.product_type}) or []
         return sorted(
-            c["symbol"] for c in data
+            self._sym_local(c["symbol"]) for c in data
             if c.get("symbol") and c.get("symbolStatus", "normal") == "normal"
         )
 
     def contrato(self, symbol: str) -> dict[str, Any]:
         """Especificação do contrato: passos de preço/quantidade e mínimos."""
         data = self._request("GET", "/api/v2/mix/market/contracts", params={
-            "symbol": symbol, "productType": self.product_type}) or []
+            "symbol": self._sym(symbol), "productType": self.product_type}) or []
         if not data:
             raise ExchangeError(f"contrato não encontrado: {symbol}")
         c = data[0]
         return {
-            "symbol": c.get("symbol", symbol),
+            "symbol": self._sym_local(c.get("symbol") or symbol),
             "price_place": int(_f(c.get("pricePlace"), 2)),
             "volume_place": int(_f(c.get("volumePlace"), 3)),
             "size_multiplier": _f(c.get("sizeMultiplier"), 0.001),
@@ -276,7 +314,10 @@ class BitgetClient:
                 continue
             entry = _f(p.get("openPriceAvg"))
             out.append(Position(
-                symbol=p.get("symbol", ""),
+                # Nome interno: a reconciliação compara esta lista com as
+                # posições locais, e `SBTCSUSDT` contra `BTCUSDT` acusaria
+                # posição fantasma e posição ausente no mesmo ciclo.
+                symbol=self._sym_local(p.get("symbol", "")),
                 side=Side.LONG if p.get("holdSide") == "long" else Side.SHORT,
                 size=size,
                 entry=entry,
@@ -293,7 +334,7 @@ class BitgetClient:
     def definir_alavancagem(self, symbol: str, leverage: float,
                             hold_side: str | None = None) -> dict:
         body: dict[str, Any] = {
-            "symbol": symbol, "productType": self.product_type,
+            "symbol": self._sym(symbol), "productType": self.product_type,
             "marginCoin": self.margin_coin, "leverage": str(int(leverage)),
         }
         if hold_side:
@@ -303,7 +344,7 @@ class BitgetClient:
 
     def definir_margin_mode(self, symbol: str, modo: str = "isolated") -> dict:
         return self._request("POST", "/api/v2/mix/account/set-margin-mode", body={
-            "symbol": symbol, "productType": self.product_type,
+            "symbol": self._sym(symbol), "productType": self.product_type,
             "marginCoin": self.margin_coin, "marginMode": modo,
         }, assinado=True) or {}
 
@@ -323,7 +364,7 @@ class BitgetClient:
         if stop_loss <= 0:
             raise ValueError("stop_loss é obrigatório para abrir posição")
         body: dict[str, Any] = {
-            "symbol": symbol,
+            "symbol": self._sym(symbol),
             "productType": self.product_type,
             "marginMode": margin_mode,
             "marginCoin": self.margin_coin,
@@ -359,7 +400,7 @@ class BitgetClient:
         """
         try:
             data = self._request("GET", "/api/v2/mix/order/detail", params={
-                "symbol": symbol, "productType": self.product_type,
+                "symbol": self._sym(symbol), "productType": self.product_type,
                 "clientOid": client_oid,
             }, assinado=True)
         except ExchangeUnreachable:
@@ -385,7 +426,7 @@ class BitgetClient:
         posição aberta, o que importa são os fills.
         """
         data = self._request("GET", "/api/v2/mix/order/fills", params={
-            "symbol": symbol, "productType": self.product_type,
+            "symbol": self._sym(symbol), "productType": self.product_type,
         }, assinado=True) or {}
         lista = data.get("fillList", data) if isinstance(data, Mapping) else data
         if not isinstance(lista, list):
@@ -399,12 +440,12 @@ class BitgetClient:
         hold_side = "long" if side is Side.LONG else "short"
         if size is None:
             return self._request("POST", "/api/v2/mix/order/close-positions", body={
-                "symbol": symbol, "productType": self.product_type,
+                "symbol": self._sym(symbol), "productType": self.product_type,
                 "holdSide": hold_side,
             }, assinado=True) or {}
         # Fechamento parcial: ordem reduce-only no sentido oposto.
         return self._request("POST", "/api/v2/mix/order/place-order", body={
-            "symbol": symbol, "productType": self.product_type,
+            "symbol": self._sym(symbol), "productType": self.product_type,
             "marginCoin": self.margin_coin, "size": str(size),
             "side": "sell" if side is Side.LONG else "buy",
             "tradeSide": "close", "orderType": "market",
@@ -413,7 +454,7 @@ class BitgetClient:
 
     def ajustar_stop(self, symbol: str, side: Side, novo_stop: float) -> dict:
         return self._request("POST", "/api/v2/mix/order/place-tpsl-order", body={
-            "symbol": symbol, "productType": self.product_type,
+            "symbol": self._sym(symbol), "productType": self.product_type,
             "marginCoin": self.margin_coin, "planType": "pos_loss",
             "triggerPrice": str(novo_stop),
             "holdSide": "long" if side is Side.LONG else "short",

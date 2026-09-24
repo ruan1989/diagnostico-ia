@@ -58,6 +58,7 @@ from .strategies.pipeline import rodar_pipeline_completo
 from .validation import comparar_modos, monte_carlo
 from .config import Settings
 from .datahub import DataHub
+from .exchanges.ambiente import Ambiente, resumo as resumo_ambiente
 from .exchanges import (
     ApiCredentials, BitgetClient, CredentialError, ExchangeError, Keystore,
     SyntheticProvider, credenciais_do_ambiente,
@@ -253,6 +254,14 @@ class AppState:
             usar_sintetico = os.environ.get(
                 "INVESTAI_SYNTHETIC", "").strip().lower() in {"1", "true", "sim"}
         self.usar_sintetico = usar_sintetico
+        # Ambiente de execução. Demo trading é uma fase do ciclo de vida, e
+        # ligá-lo tem de ser uma escolha explícita: um sistema que decide
+        # sozinho para onde manda ordem é o oposto do que este projeto é.
+        self.ambiente = (
+            Ambiente.DEMO
+            if os.environ.get("INVESTAI_AMBIENTE", "").strip().lower()
+            in {"demo", "paper_trading_bitget", "teste"}
+            else Ambiente.REAL)
         self.provider = self._montar_provider()
         self.hub = DataHub(self.provider)
         self.screener = Screener(self.hub, self.settings)
@@ -299,7 +308,7 @@ class AppState:
         self.guarda = GuardaFase(
             self.strategies,
             capital_usd=self.settings.exec.capital_inicial_usd,
-            trava=self._ler_trava)
+            trava=self._ler_trava, em_demo=self._em_demo)
         # Controle de idempotência ligado ao banco: sobrevive a reinício do
         # processo, que é exatamente o caso que ele existe para resolver.
         self.idempotencia = ControleIdempotencia(self.store, self.bitget)
@@ -405,6 +414,10 @@ class AppState:
         self.bitget = cliente
         return cliente
 
+    def _em_demo(self) -> bool:
+        """A conexão ativa aponta para o ambiente de teste da corretora?"""
+        return bool(getattr(self.bitget, "e_demo", False))
+
     def _ler_trava(self) -> tuple[bool, str]:
         """Estado da parada de emergência, no formato que a guarda espera."""
         t = self.trava.ler()
@@ -427,7 +440,8 @@ class AppState:
         if self.bitget is None:
             self.bitget = BitgetClient(
                 cred, product_type=self.settings.exec.product_type,
-                margin_coin=self.settings.exec.margin_coin)
+                margin_coin=self.settings.exec.margin_coin,
+                ambiente=self.ambiente)
         else:
             self.bitget.cred = cred
         self.executor.backend = self.bitget
@@ -772,6 +786,21 @@ def criar_app(state: AppState | None = None) -> FastAPI:
         if not res.get("ok"):
             raise HTTPException(400, res.get("motivo", "proposta inexistente"))
         return {"mensagem": res.get("motivo", ""), "resultado": res}
+
+    # ------------------------------------------------------------- ambiente
+    @app.get("/api/ambiente")
+    def ambiente_estado() -> dict[str, Any]:
+        """Para onde as ordens iriam, se fossem enviadas agora."""
+        return {
+            **resumo_ambiente(st.ambiente, st.settings.exec.product_type,
+                              st.settings.exec.margin_coin),
+            "conexao_em_demo": st._em_demo(),
+            "como_mudar": (
+                "defina INVESTAI_AMBIENTE=demo antes de subir o sistema. "
+                "Não há chave para alternar em tempo de execução: trocar o "
+                "destino das ordens com o motor ligado é como trocar de "
+                "pista no meio da curva."),
+        }
 
     # --------------------------------------------------------- reconciliação
     @app.get("/api/reconciliacao")

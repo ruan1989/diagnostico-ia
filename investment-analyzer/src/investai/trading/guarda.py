@@ -48,6 +48,11 @@ log = logging.getLogger("investai.guarda")
 # Fases a partir das quais existe qualquer contato com dinheiro real.
 FASES_REAIS: tuple[Fase, ...] = (Fase.ASSISTIDO, Fase.REAL_LIMITADO)
 
+# A fase DEMO envia ordens de verdade — no ambiente de teste da corretora.
+# Ela NÃO entra em `FASES_REAIS`: autorizar a mesma ordem contra a conta real
+# seria exatamente o acidente que o ambiente de demo existe para evitar.
+FASES_DEMO: tuple[Fase, ...] = (Fase.DEMO,)
+
 # Fração máxima do capital que uma única ordem pode movimentar em notional
 # quando a estratégia está em REAL_LIMITADO.
 TETO_NOTIONAL_FRAC_REAL_LIMITADO = 0.25
@@ -115,7 +120,8 @@ class GuardaFase:
     def __init__(self, registry: StrategyRegistry | None = None, *,
                  capital_usd: float = 0.0,
                  validade_confirmacao_s: float = 300.0,
-                 trava: Callable[[], tuple[bool, str]] | None = None):
+                 trava: Callable[[], tuple[bool, str]] | None = None,
+                 em_demo: Callable[[], bool] | None = None):
         self.registry = registry
         self.capital_usd = max(0.0, capital_usd)
         self.validade_confirmacao_s = validade_confirmacao_s
@@ -123,6 +129,11 @@ class GuardaFase:
         # objeto, para que este módulo não dependa da camada de operação —
         # a trava precisa poder ser lida de onde ela estiver guardada.
         self._trava = trava
+        # Diz se a conexão ativa aponta para o ambiente de demo. A guarda
+        # precisa disso porque a fase DEMO autoriza envio APENAS para lá: a
+        # mesma ordem contra a conta real é o acidente que o ambiente de
+        # teste existe para evitar.
+        self._em_demo = em_demo
         self._chave: str | None = None
         self._confirmacoes: dict[str, _Confirmacao] = {}
 
@@ -251,6 +262,21 @@ class GuardaFase:
             return Autorizacao(
                 False, "estratégia aposentada: ordem real bloqueada", **base)
 
+        if fase in FASES_DEMO:
+            em_demo = bool(self._em_demo()) if self._em_demo else False
+            if not em_demo:
+                return Autorizacao(
+                    False,
+                    "estratégia em demo, mas a conexão ativa aponta para a "
+                    "conta REAL. Ordem bloqueada: enviar para o real uma "
+                    "ordem de fase demo é o acidente que o ambiente de teste "
+                    "existe para evitar",
+                    faltam_fases=_fases_faltando(fase), **base)
+            return Autorizacao(
+                True, "fase demo com conexão apontada para o ambiente de "
+                      "teste: a ordem vai para lá e não movimenta dinheiro",
+                **base)
+
         if fase not in FASES_REAIS:
             faltam = _fases_faltando(fase)
             return Autorizacao(
@@ -258,6 +284,16 @@ class GuardaFase:
                 f"estratégia em {fase.value}: nenhuma ordem real sai antes de "
                 f"assistido. Faltam as fases {', '.join(faltam)}",
                 faltam_fases=faltam, **base)
+
+        # Fase real com a conexão apontada para o demo é o espelho do caso
+        # acima: a ordem iria para a conta de teste achando que opera.
+        if self._em_demo is not None and self._em_demo():
+            return Autorizacao(
+                False,
+                f"estratégia em {fase.value} (fase real), mas a conexão "
+                f"aponta para o ambiente de DEMO. A ordem não movimentaria "
+                f"dinheiro e o resultado medido não seria real",
+                **base)
 
         if fase is Fase.ASSISTIDO:
             if not client_oid:
@@ -319,10 +355,12 @@ class GuardaFase:
                 round(self.capital_usd * TETO_NOTIONAL_FRAC_REAL_LIMITADO, 2)
                 if self.capital_usd > 0 else None),
             "validade_confirmacao_s": self.validade_confirmacao_s,
+            "em_demo": (bool(self._em_demo()) if self._em_demo else None),
             "confirmacoes_pendentes": len(self.confirmacoes_pendentes()),
             "fases_que_permitem_real": [f.value for f in FASES_REAIS],
         }
 
 
-__all__ = ["Autorizacao", "GuardaError", "GuardaFase", "FASES_REAIS",
+__all__ = ["Autorizacao", "GuardaError", "GuardaFase", "FASES_DEMO",
+           "FASES_REAIS",
            "TETO_NOTIONAL_FRAC_REAL_LIMITADO"]

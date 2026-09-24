@@ -31,6 +31,7 @@ class Fase(str, Enum):
     OUT_OF_SAMPLE = "out_of_sample"
     PAPER_TRADING = "paper_trading"
     SHADOW = "shadow"
+    DEMO = "demo"
     ASSISTIDO = "assistido"
     REAL_LIMITADO = "real_limitado"
     APOSENTADA = "aposentada"
@@ -45,6 +46,7 @@ ORDEM: tuple[Fase, ...] = (
     Fase.OUT_OF_SAMPLE,
     Fase.PAPER_TRADING,
     Fase.SHADOW,
+    Fase.DEMO,
     Fase.ASSISTIDO,
     Fase.REAL_LIMITADO,
 )
@@ -60,6 +62,11 @@ DESCRICAO_FASE: dict[Fase, str] = {
                         "sofrendo spread, slippage e latência de verdade.",
     Fase.SHADOW: "Produz decisões em tempo real sem enviar ordens, e compara "
                  "decisão teórica com execução simulada e movimento real.",
+    Fase.DEMO: "Envia ordens de verdade ao ambiente de teste da corretora. "
+               "Shadow prova que as DECISÕES valem; demo prova que o "
+               "ENCANAMENTO funciona — assinatura, arredondamento ao passo "
+               "do contrato, stop anexado, reconciliação, idempotência. São "
+               "coisas diferentes, e a segunda só se descobre enviando.",
     Fase.ASSISTIDO: "Propõe operações reais, mas um humano confirma cada uma.",
     Fase.REAL_LIMITADO: "Opera capital real com limite reduzido e sob "
                         "monitoramento. Nunca é 'liberado', é 'limitado'.",

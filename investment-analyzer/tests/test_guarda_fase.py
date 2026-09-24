@@ -149,7 +149,7 @@ def test_vincular_sem_registro_falha():
 # ------------------------------------------------- fases que não operam real
 @pytest.mark.parametrize("fase", [
     Fase.RASCUNHO, Fase.BACKTEST, Fase.OUT_OF_SAMPLE, Fase.PAPER_TRADING,
-    Fase.SHADOW,
+    Fase.SHADOW, Fase.DEMO,
 ])
 def test_fase_anterior_a_assistido_nao_manda_ordem(fase):
     ex, backend, _ = executor_live(fase)
@@ -165,7 +165,8 @@ def test_bloqueio_diz_quais_fases_faltam():
     ex, _, _ = executor_live(Fase.OUT_OF_SAMPLE)
     res = ex.abrir(sinal(), decisao(), agora_ms=AGORA)
     faltam = res.autorizacao.faltam_fases
-    assert faltam == ["paper_trading", "shadow", "assistido", "real_limitado"]
+    assert faltam == ["paper_trading", "shadow", "demo", "assistido",
+                      "real_limitado"]
     assert "paper_trading" in res.mensagem
 
 
@@ -386,7 +387,8 @@ def test_estado_da_guarda_expõe_o_que_falta():
     _, _, g = executor_live(Fase.SHADOW, capital=1000.0)
     est = g.estado()
     assert est["versao"]["fase"] == "shadow"
-    assert est["versao"]["faltam_fases"] == ["assistido", "real_limitado"]
+    assert est["versao"]["faltam_fases"] == ["demo", "assistido",
+                                             "real_limitado"]
     assert est["teto_notional_usd"] == pytest.approx(250.0)
     assert est["fases_que_permitem_real"] == ["assistido", "real_limitado"]
 
@@ -439,7 +441,8 @@ def test_armar_sem_estrategia_vinculada_e_recusado(settings, hub, store):
 
 
 @pytest.mark.parametrize("fase", [Fase.BACKTEST, Fase.OUT_OF_SAMPLE,
-                                  Fase.PAPER_TRADING, Fase.SHADOW])
+                                  Fase.PAPER_TRADING, Fase.SHADOW,
+                                  Fase.DEMO])
 def test_armar_com_fase_insuficiente_e_recusado(fase, settings, hub, store):
     motor, _, _ = motor_com(fase, settings, hub, store)
     ok, msg = motor.armar_live("OPERAR COM DINHEIRO REAL")

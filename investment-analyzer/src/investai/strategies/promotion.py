@@ -106,6 +106,16 @@ class CriteriosPromocao:
     shadow_min_dias: int = 14
     # Fração das decisões em que a execução simulada bateu com a teórica.
     shadow_min_fidelidade: float = 0.85
+    # Demo mede o ENCANAMENTO, não a vantagem. Por isso os critérios são
+    # sobre execução: ordens aceitas, preenchimento coerente com o plano e
+    # zero divergência de reconciliação. Exigir expectativa positiva aqui
+    # confundiria "o sistema sabe enviar ordem" com "a estratégia dá
+    # dinheiro", que é o que as fases anteriores já mediram.
+    demo_min_ordens: int = 20
+    demo_min_dias: int = 5
+    demo_min_taxa_aceite: float = 0.98
+    demo_max_divergencias: int = 0
+    demo_max_desvio_preenchimento_pct: float = 0.20
 
     # --------------------------------- ASSISTIDO → REAL_LIMITADO
     assistido_min_operacoes: int = 25
@@ -140,6 +150,14 @@ class CriteriosPromocao:
                 "min_expectancy_r": self.paper_min_expectancy_r,
                 "min_dias": self.paper_min_dias,
                 "max_desvio_vs_oos": self.paper_max_desvio_vs_oos,
+            },
+            "demo": {
+                "min_ordens": self.demo_min_ordens,
+                "min_dias": self.demo_min_dias,
+                "min_taxa_aceite": self.demo_min_taxa_aceite,
+                "max_divergencias": self.demo_max_divergencias,
+                "max_desvio_preenchimento_pct":
+                    self.demo_max_desvio_preenchimento_pct,
             },
             "shadow": {
                 "min_decisoes": self.shadow_min_decisoes,
@@ -177,6 +195,12 @@ class EvidenciaFase:
     decisoes_shadow: int | None = None
     dias_shadow: int | None = None
     fidelidade_shadow: float | None = None
+    # Demo trading: execução no ambiente de teste da corretora.
+    ordens_demo: int | None = None
+    dias_demo: int | None = None
+    taxa_aceite_demo: float | None = None
+    divergencias_demo: int | None = None
+    desvio_preenchimento_demo_pct: float | None = None
 
     operacoes_assistido: int | None = None
     dias_assistido: int | None = None
@@ -207,6 +231,8 @@ def avaliar_gate(fase: Fase, ev: EvidenciaFase,
         return _gate_paper(ev, crit)
     if fase is Fase.SHADOW:
         return _gate_shadow(ev, crit)
+    if fase is Fase.DEMO:
+        return _gate_demo(ev, crit)
     if fase is Fase.ASSISTIDO:
         return _gate_assistido(ev, crit)
 
@@ -384,7 +410,7 @@ def _gate_shadow(ev: EvidenciaFase, crit: CriteriosPromocao) -> ResultadoGate:
     if ev.fidelidade_shadow is None:
         faltando.append("fidelidade_shadow")
     if faltando:
-        return _finalizar(Fase.SHADOW, Fase.ASSISTIDO, [], faltando)
+        return _finalizar(Fase.SHADOW, Fase.DEMO, [], faltando)
 
     assert (ev.decisoes_shadow is not None and ev.dias_shadow is not None
             and ev.fidelidade_shadow is not None)
@@ -400,7 +426,63 @@ def _gate_shadow(ev: EvidenciaFase, crit: CriteriosPromocao) -> ResultadoGate:
            "decisão teórica; abaixo disso o sistema decide uma coisa e "
            "executa outra"),
     ]
-    return _finalizar(Fase.SHADOW, Fase.ASSISTIDO, criterios, faltando)
+    return _finalizar(Fase.SHADOW, Fase.DEMO, criterios, faltando)
+
+
+def _gate_demo(ev: EvidenciaFase, crit: CriteriosPromocao) -> ResultadoGate:
+    """Demo → assistido: o encanamento funciona?
+
+    Shadow já provou que as decisões valem alguma coisa. O que demo mede é
+    outra coisa inteiramente: assinatura aceita, tamanho arredondado ao passo
+    do contrato, stop anexado à ordem de abertura, `clientOid` impedindo
+    duplicata, reconciliação sem divergência. Nada disso aparece em
+    simulação, e tudo isso quebra na primeira ordem real.
+
+    Por isso o critério de preenchimento é sobre DESVIO em relação ao preço
+    planejado, e não sobre lucro: uma ordem que executa 0,5% longe do plano
+    revela um problema de execução mesmo quando dá lucro por sorte.
+    """
+    faltando: list[str] = []
+    if ev.ordens_demo is None:
+        faltando.append("ordens_demo")
+    if ev.dias_demo is None:
+        faltando.append("dias_demo")
+    if ev.taxa_aceite_demo is None:
+        faltando.append("taxa_aceite_demo")
+    if ev.divergencias_demo is None:
+        faltando.append("divergencias_demo")
+    if faltando:
+        return _finalizar(Fase.DEMO, Fase.ASSISTIDO, [], faltando)
+
+    assert (ev.ordens_demo is not None and ev.dias_demo is not None
+            and ev.taxa_aceite_demo is not None
+            and ev.divergencias_demo is not None)
+    criterios = [
+        _c("demo_ordens", crit.demo_min_ordens, ev.ordens_demo,
+           ev.ordens_demo >= crit.demo_min_ordens),
+        _c("demo_dias", crit.demo_min_dias, ev.dias_demo,
+           ev.dias_demo >= crit.demo_min_dias),
+        _c("demo_taxa_aceite", crit.demo_min_taxa_aceite,
+           ev.taxa_aceite_demo,
+           ev.taxa_aceite_demo >= crit.demo_min_taxa_aceite,
+           "fração das ordens que a corretora aceitou; rejeição aqui é "
+           "defeito de montagem da ordem, e ele se repete igual no real"),
+        _c("demo_divergencias", f"<= {crit.demo_max_divergencias}",
+           ev.divergencias_demo,
+           ev.divergencias_demo <= crit.demo_max_divergencias,
+           "divergências entre o estado local e o da corretora; qualquer "
+           "uma aqui vira posição sem gestão no real"),
+    ]
+    if ev.desvio_preenchimento_demo_pct is not None:
+        criterios.append(_c(
+            "demo_desvio_preenchimento",
+            f"<= {crit.demo_max_desvio_preenchimento_pct}%",
+            ev.desvio_preenchimento_demo_pct,
+            (ev.desvio_preenchimento_demo_pct
+             <= crit.demo_max_desvio_preenchimento_pct),
+            "distância média entre o preço planejado e o executado; desvio "
+            "alto revela problema de execução mesmo quando dá lucro"))
+    return _finalizar(Fase.DEMO, Fase.ASSISTIDO, criterios, faltando)
 
 
 def _gate_assistido(ev: EvidenciaFase,

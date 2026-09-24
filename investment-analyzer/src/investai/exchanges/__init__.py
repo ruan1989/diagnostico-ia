@@ -25,3 +25,13 @@ __all__ += [
     "SILENCIO_PARA_RECONECTAR_MS", "TOLERANCIA_PADRAO_MS", "URL_PRIVADA",
     "URL_PUBLICA", "assinar_login", "canais_publicos",
 ]
+from .ambiente import (
+    PREFIXO_DEMO, Ambiente, cabecalhos_de, do_demo, para_demo,
+    product_type_de, traduzir,
+)
+from .ambiente import resumo as resumo_ambiente
+
+__all__ += [
+    "Ambiente", "PREFIXO_DEMO", "cabecalhos_de", "do_demo", "para_demo",
+    "product_type_de", "resumo_ambiente", "traduzir",
+]
