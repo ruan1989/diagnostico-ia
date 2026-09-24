@@ -40,6 +40,25 @@ def _assinar(secret: str, timestamp: str, method: str, path: str, body: str) -> 
     return base64.b64encode(digest).decode()
 
 
+# Códigos da Bitget que significam "essa ordem não existe", e não "deu erro".
+# A distinção é a base da idempotência: reenviar porque a consulta falhou é o
+# caminho para posição dobrada.
+CODIGOS_ORDEM_INEXISTENTE = frozenset({
+    "22001",   # no order to cancel / order does not exist
+    "40109",   # the order does not exist
+    "43001",   # the order does not exist
+    "40768",   # order does not exist
+})
+
+
+def _ordem_inexistente(exc: Exception) -> bool:
+    texto = str(exc)
+    if any(c in texto for c in CODIGOS_ORDEM_INEXISTENTE):
+        return True
+    baixo = texto.lower()
+    return "does not exist" in baixo or "no order" in baixo
+
+
 def _f(valor: Any, default: float = 0.0) -> float:
     """Converte campos da API (que vêm como string, às vezes vazia) em float."""
     if valor is None or valor == "":
@@ -323,6 +342,57 @@ class BitgetClient:
             body["clientOid"] = client_oid   # idempotência: evita ordem duplicada
         return self._request("POST", "/api/v2/mix/order/place-order",
                              body=body, assinado=True) or {}
+
+    def ordem_por_client_oid(self, symbol: str,
+                             client_oid: str) -> dict[str, Any] | None:
+        """Procura uma ordem pelo `clientOid`. Devolve None se não existir.
+
+        É a pergunta que o sistema precisa fazer ao subir depois de uma queda:
+        a ordem que eu ia mandar chegou aqui? A Bitget responde 400 com um
+        código de "ordem não existe" quando não encontra, e este método
+        traduz isso em None em vez de propagar erro — porque "não existe" é
+        uma resposta válida e útil, não uma falha.
+
+        Um erro de rede, por outro lado, é propagado: não saber é diferente
+        de saber que não existe, e confundir os dois é o que gera ordem
+        duplicada.
+        """
+        try:
+            data = self._request("GET", "/api/v2/mix/order/detail", params={
+                "symbol": symbol, "productType": self.product_type,
+                "clientOid": client_oid,
+            }, assinado=True)
+        except ExchangeUnreachable:
+            # Rede fora não é "ordem não existe". Propaga para que quem
+            # chamou trate como incerteza, nunca como ausência.
+            raise
+        except ExchangeError as exc:
+            if _ordem_inexistente(exc):
+                return None
+            raise
+        if not data:
+            return None
+        if isinstance(data, list):
+            data = data[0] if data else None
+        return dict(data) if isinstance(data, Mapping) else None
+
+    def fills_por_client_oid(self, symbol: str,
+                             client_oid: str) -> list[dict[str, Any]]:
+        """Execuções associadas a um `clientOid`.
+
+        A consulta de ordem pode responder que a ordem existe e foi
+        cancelada; os fills dizem se ela moveu dinheiro. Para decidir se há
+        posição aberta, o que importa são os fills.
+        """
+        data = self._request("GET", "/api/v2/mix/order/fills", params={
+            "symbol": symbol, "productType": self.product_type,
+        }, assinado=True) or {}
+        lista = data.get("fillList", data) if isinstance(data, Mapping) else data
+        if not isinstance(lista, list):
+            return []
+        return [dict(f) for f in lista
+                if isinstance(f, Mapping)
+                and f.get("clientOid") == client_oid]
 
     def fechar_posicao(self, symbol: str, side: Side,
                        size: float | None = None) -> dict:

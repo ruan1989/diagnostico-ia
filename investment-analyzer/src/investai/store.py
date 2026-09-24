@@ -102,6 +102,37 @@ CREATE TABLE IF NOT EXISTS estado (
     valor TEXT NOT NULL,
     atualizado_em INTEGER NOT NULL
 );
+
+-- Intenções de envio de ordem real, gravadas ANTES da chamada à corretora.
+--
+-- O motivo é o cenário que mais assusta em operação automatizada: o processo
+-- morre entre o envio e a resposta. Sem este registro, na volta o sistema não
+-- tem como saber se a ordem chegou, e a escolha fica entre reenviar (posição
+-- dobrada) ou ignorar (posição sem proteção). Com ele, a volta é uma
+-- pergunta respondível: "existe ordem com este clientOid na corretora?"
+--
+-- `estado` percorre: pendente -> confirmada | ausente | falhou | adotada
+--   pendente   intenção gravada, resposta ainda desconhecida
+--   confirmada corretora respondeu aceitando
+--   ausente    consulta posterior provou que a ordem não existe lá
+--   falhou     corretora recusou explicitamente
+--   adotada    a ordem já existia na corretora; não foi reenviada
+CREATE TABLE IF NOT EXISTS envios_ordem (
+    client_oid   TEXT PRIMARY KEY,
+    criado_em    INTEGER NOT NULL,
+    symbol       TEXT NOT NULL,
+    side         TEXT NOT NULL,
+    size         REAL NOT NULL,
+    entry        REAL NOT NULL,
+    stop_loss    REAL NOT NULL,
+    estado       TEXT NOT NULL DEFAULT 'pendente',
+    resolvido_em INTEGER,
+    tentativas   INTEGER NOT NULL DEFAULT 0,
+    order_id     TEXT,
+    detalhe      TEXT,
+    payload      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_envios_estado ON envios_ordem(estado, criado_em);
 """
 
 
@@ -125,6 +156,85 @@ class Store:
 
     # ------------------------------------------------------------------ sinais
     # ------------------------------------------------------------- shadow
+    # ------------------------------------------------- envios de ordem real
+    def registrar_intencao_envio(self, *, client_oid: str, symbol: str,
+                                 side: str, size: float, entry: float,
+                                 stop_loss: float, criado_em: int,
+                                 payload: dict[str, Any] | None = None
+                                 ) -> tuple[bool, dict[str, Any] | None]:
+        """Grava a intenção de enviar uma ordem, ANTES de enviá-la.
+
+        Devolve `(nova, existente)`. Quando `nova` é False, já houve uma
+        tentativa com este `clientOid` e `existente` traz o estado dela — que
+        é exatamente a informação que falta para decidir com segurança se
+        pode reenviar.
+
+        A gravação precisa vir antes da chamada à corretora. Se viesse
+        depois, o intervalo entre enviar e registrar seria uma janela em que
+        o processo pode morrer deixando uma ordem viva e nenhum rastro dela.
+        """
+        registro = {
+            "client_oid": client_oid, "symbol": symbol, "side": side,
+            "size": size, "entry": entry, "stop_loss": stop_loss,
+            "criado_em": criado_em, **(payload or {}),
+        }
+        with self._lock:
+            try:
+                self._conn.execute(
+                    """INSERT INTO envios_ordem
+                       (client_oid, criado_em, symbol, side, size, entry,
+                        stop_loss, estado, tentativas, payload)
+                       VALUES (?,?,?,?,?,?,?,'pendente',1,?)""",
+                    (client_oid, criado_em, symbol, side, size, entry,
+                     stop_loss, json.dumps(registro, ensure_ascii=False)))
+                self._conn.commit()
+                return True, None
+            except sqlite3.IntegrityError:
+                self._conn.execute(
+                    "UPDATE envios_ordem SET tentativas = tentativas + 1 "
+                    "WHERE client_oid = ?", (client_oid,))
+                self._conn.commit()
+                return False, self.envio(client_oid)
+
+    def resolver_envio(self, client_oid: str, *, estado: str,
+                       resolvido_em: int, order_id: str = "",
+                       detalhe: str = "") -> None:
+        with self._lock:
+            self._conn.execute(
+                """UPDATE envios_ordem
+                   SET estado=?, resolvido_em=?, order_id=?, detalhe=?
+                   WHERE client_oid=?""",
+                (estado, resolvido_em, order_id, detalhe[:500], client_oid))
+            self._conn.commit()
+
+    def envio(self, client_oid: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM envios_ordem WHERE client_oid=?",
+                (client_oid,)).fetchone()
+        return dict(row) if row else None
+
+    def envios(self, *, estado: str | None = None,
+               limite: int = 200) -> list[dict[str, Any]]:
+        sql = "SELECT * FROM envios_ordem"
+        params: list[Any] = []
+        if estado:
+            sql += " WHERE estado=?"
+            params.append(estado)
+        sql += " ORDER BY criado_em DESC LIMIT ?"
+        params.append(limite)
+        with self._lock:
+            rows = self._conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def envios_pendentes(self) -> list[dict[str, Any]]:
+        """Intenções cujo destino ainda é desconhecido.
+
+        É esta lista que precisa ser resolvida contra a corretora ao subir o
+        sistema. Cada item aqui é uma ordem que pode estar viva lá.
+        """
+        return self.envios(estado="pendente", limite=1000)
+
     def salvar_decisao_shadow(self, d: dict[str, Any]) -> bool:
         """Grava uma decisão de shadow mode. Devolve False se já existia.
 

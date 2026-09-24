@@ -129,3 +129,43 @@ def test_status_do_motor_inclui_guarda(cliente):
     assert corpo["guarda"]["versao"]["fase"] == "shadow"
     assert corpo["guarda"]["versao"]["operavel_real"] is False
     assert corpo["propostas_pendentes"] == []
+
+
+# =====================================================================
+# Endpoints da idempotência
+# =====================================================================
+def test_envios_comeca_vazio(cliente):
+    corpo = cliente.get("/api/envios").json()
+    assert corpo["idempotencia"]["pendentes"] == 0
+    assert corpo["reconciliacao_subida"]["conferidas"] == 0
+    assert corpo["reconciliacao_subida"]["exige_atencao"] is False
+
+
+def test_envios_mostra_pendencia_gravada(cliente):
+    cliente.estado.store.registrar_intencao_envio(
+        client_oid="iai-pendente", symbol="BTCUSDT", side="long",
+        size=0.001, entry=64000.0, stop_loss=62000.0,
+        criado_em=1_700_000_000_000)
+    corpo = cliente.get("/api/envios").json()
+    assert corpo["idempotencia"]["pendentes"] == 1
+
+
+def test_reconciliar_exige_token(cliente):
+    r = cliente.post("/api/envios/reconciliar")
+    assert r.status_code in (401, 403)
+
+
+def test_reconciliar_sem_conexao_nao_conclui_nada(cliente):
+    """Em modo sintético não há consulta de ordem; nada pode ser concluído.
+
+    O endpoint tem de dizer isso, não fingir que conferiu.
+    """
+    cliente.estado.store.registrar_intencao_envio(
+        client_oid="iai-x", symbol="BTCUSDT", side="long", size=0.001,
+        entry=64000.0, stop_loss=62000.0, criado_em=1_700_000_000_000)
+    corpo = cliente.post("/api/envios/reconciliar", headers=auth()).json()
+    res = corpo["resultado"]
+    assert res["conferidas"] == 1
+    assert res["ausentes"] == []
+    assert res["exige_atencao"] is True
+    assert cliente.estado.store.envio("iai-x")["estado"] == "pendente"

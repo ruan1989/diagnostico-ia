@@ -59,7 +59,10 @@ from .models import Side
 from .passive import carteira_sugerida, provider_padrao, ranquear
 from .risk import RiskManager
 from .store import Store
-from .trading import CONFIRMACAO_LIVE, Executor, GuardaFase, TradingEngine
+from .trading import (
+    CONFIRMACAO_LIVE, ControleIdempotencia, Executor, GuardaFase,
+    TradingEngine,
+)
 
 log = logging.getLogger("investai.api")
 
@@ -257,8 +260,12 @@ class AppState:
         # guarda autoriza aqui, sem nenhuma sincronização manual.
         self.guarda = GuardaFase(self.strategies,
                                  capital_usd=self.settings.exec.capital_inicial_usd)
+        # Controle de idempotência ligado ao banco: sobrevive a reinício do
+        # processo, que é exatamente o caso que ele existe para resolver.
+        self.idempotencia = ControleIdempotencia(self.store, self.bitget)
         self.executor = Executor(self.settings.exec, backend=self.bitget,
-                                 modo="paper", guarda=self.guarda)
+                                 modo="paper", guarda=self.guarda,
+                                 idempotencia=self.idempotencia)
         self.engine = TradingEngine(self.settings, self.screener, self.executor,
                                     self.risk, self.store)
         self.orquestrador = Orquestrador(
@@ -267,6 +274,18 @@ class AppState:
             alertas=self.alertas, journal=self.journal,
             relogio=self._relogio_dados)
         self.ultimo_ciclo = None
+
+        # Reconciliação de subida: intenções de ordem que ficaram com destino
+        # desconhecido em uma execução anterior. Roda aqui, antes de o motor
+        # existir, porque o resultado pode ser "há posição real aberta que
+        # este processo não conhece" — e isso precisa estar na tela antes de
+        # qualquer ordem nova.
+        self.reconciliacao_subida = self.idempotencia.reconciliar_pendentes()
+        if self.reconciliacao_subida.exige_atencao:
+            self.store.registrar_evento(
+                "ALERTA", "idempotencia",
+                "ordens pendentes encontradas na subida",
+                self.reconciliacao_subida.to_dict())
 
         # Shadow mode: registra em disco a decisão que o sistema tomaria e,
         # nos ciclos seguintes, confere o que o mercado fez com ela. Não
@@ -362,6 +381,10 @@ class AppState:
         else:
             self.bitget.cred = cred
         self.executor.backend = self.bitget
+        # A consulta de ordem por clientOid precisa da mesma conexão
+        # autenticada; sem isto, a idempotência ficaria cega justamente
+        # depois de o usuário conectar a chave.
+        self.idempotencia.backend = self.bitget
         diag = self.bitget.verificar_credenciais()
         # Aqui a chave foi de fato consultada na exchange, então `validada`
         # acompanha `ok`.
@@ -699,6 +722,35 @@ def criar_app(state: AppState | None = None) -> FastAPI:
         if not res.get("ok"):
             raise HTTPException(400, res.get("motivo", "proposta inexistente"))
         return {"mensagem": res.get("motivo", ""), "resultado": res}
+
+    # ------------------------------------------------------- idempotência
+    @app.get("/api/envios")
+    def envios_estado() -> dict[str, Any]:
+        """Intenções de ordem e o que se sabe sobre o destino de cada uma."""
+        return {
+            "idempotencia": st.idempotencia.estado(),
+            "reconciliacao_subida": st.reconciliacao_subida.to_dict(),
+            "aviso": ("Uma intenção 'pendente' é uma ordem cujo destino este "
+                      "sistema não conseguiu estabelecer. Enquanto estiver "
+                      "pendente, nenhuma ordem com o mesmo clientOid será "
+                      "reenviada."),
+        }
+
+    @app.post("/api/envios/reconciliar", dependencies=protegido)
+    def envios_reconciliar() -> dict[str, Any]:
+        """Pergunta à corretora o que houve com cada intenção pendente."""
+        rel = st.idempotencia.reconciliar_pendentes()
+        st.reconciliacao_subida = rel
+        if rel.exige_atencao:
+            st.store.registrar_evento(
+                "ALERTA", "idempotencia", "reconciliação manual com pendências",
+                rel.to_dict())
+        return {"resultado": rel.to_dict(),
+                "mensagem": (
+                    f"{rel.conferidas} intenção(ões) conferida(s); "
+                    f"{len(rel.adotadas)} já estava(m) na corretora, "
+                    f"{len(rel.ausentes)} não chegou(aram), "
+                    f"{len(rel.indeterminadas)} sem resposta")}
 
     @app.post("/api/risco/rearmar", dependencies=protegido)
     def risco_rearmar() -> dict[str, Any]:

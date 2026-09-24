@@ -29,9 +29,11 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from ..config import ExecutionConfig
+from ..exchanges.base import ExchangeUnreachable
 from ..models import Position, Side, Signal, Trade
 from ..risk.manager import DecisaoRisco
 from .guarda import Autorizacao, GuardaFase
+from .idempotencia import ControleIdempotencia, Veredicto
 
 log = logging.getLogger("investai.executor")
 
@@ -57,6 +59,9 @@ class ResultadoExecucao:
     mensagem: str
     posicao: Position | None = None
     ordem: dict[str, Any] = field(default_factory=dict)
+    # Veredicto da idempotência, quando houve consulta. Diz se a ordem foi
+    # enviada, adotada de uma tentativa anterior ou recusada por incerteza.
+    envio: Veredicto | None = None
     # Veredicto da guarda de fase, quando houve consulta. Fica no resultado
     # para que o painel e o journal mostrem POR QUE a ordem não saiu, em vez
     # de apenas "bloqueada".
@@ -66,6 +71,7 @@ class ResultadoExecucao:
         return {
             "ok": self.ok, "mensagem": self.mensagem,
             "autorizacao": self.autorizacao.to_dict() if self.autorizacao else None,
+            "envio": self.envio.to_dict() if self.envio else None,
             "posicao": {
                 "symbol": self.posicao.symbol, "side": self.posicao.side.value,
                 "size": self.posicao.size, "entry": self.posicao.entry,
@@ -117,7 +123,8 @@ class Executor:
 
     def __init__(self, cfg: ExecutionConfig, backend: _TradingBackend | None = None,
                  modo: str | None = None, *,
-                 guarda: GuardaFase | None = None):
+                 guarda: GuardaFase | None = None,
+                 idempotencia: ControleIdempotencia | None = None):
         self.cfg = cfg
         self.backend = backend
         self.modo = (modo or cfg.modo).lower()
@@ -128,6 +135,10 @@ class Executor:
         # Sem guarda explícita, cria uma sem registro — que nega tudo. O
         # padrão de um executor recém-construído é não conseguir operar real.
         self.guarda = guarda if guarda is not None else GuardaFase()
+        # Sem controle de idempotência, o executor mantém o comportamento
+        # antigo (só o clientOid determinístico). Quem opera de verdade
+        # recebe um, ligado ao banco — ver `api.py`.
+        self.idempotencia = idempotencia
         self._posicoes_papel: dict[str, Position] = {}
 
     @property
@@ -212,6 +223,27 @@ class Executor:
                 False, f"guarda de fase bloqueou: {autorizacao.motivo}",
                 autorizacao=autorizacao)
 
+        # --------------------------------------------- idempotência
+        # Grava a intenção ANTES de qualquer chamada, e recusa o envio quando
+        # existe uma tentativa anterior cujo destino não se conseguiu
+        # estabelecer. Vem depois da guarda porque não faz sentido registrar
+        # intenção de uma ordem que a fase não autoriza.
+        veredicto: Veredicto | None = None
+        if self.idempotencia is not None:
+            veredicto = self.idempotencia.antes_de_enviar(
+                client_oid=client_oid, symbol=sinal.symbol,
+                side=sinal.side.value, size=size, entry=sinal.entry,
+                stop_loss=stop, agora_ms=agora,
+                payload={"take_profits": list(sinal.take_profits),
+                         "alavancagem": decisao.alavancagem,
+                         "risco_usd": decisao.risco_usd})
+            if not veredicto.pode_enviar:
+                log.warning("envio de %s recusado pela idempotência: %s",
+                            sinal.symbol, veredicto.motivo)
+                return ResultadoExecucao(
+                    False, f"envio não repetido: {veredicto.motivo}",
+                    autorizacao=autorizacao, envio=veredicto)
+
         assert self.backend is not None
         try:
             # Margem isolada limita a perda ao valor alocado naquela posição.
@@ -231,15 +263,33 @@ class Executor:
             ordem = self.backend.abrir_posicao(
                 sinal.symbol, sinal.side, size, decisao.alavancagem, stop,
                 alvo1, client_oid, self.cfg.margin_mode, None)
+        except ExchangeUnreachable as exc:
+            # Rede fora no meio do envio: a ordem PODE ter chegado. A intenção
+            # fica `pendente` de propósito, para que a próxima subida (ou a
+            # próxima tentativa) pergunte à corretora em vez de adivinhar.
+            log.error("envio de %s sem resposta: %s", sinal.symbol, exc)
+            return ResultadoExecucao(
+                False, f"envio sem resposta da corretora ({exc}). A ordem pode "
+                       f"ter chegado; nada será reenviado até que a consulta "
+                       f"por clientOid diga o que houve",
+                autorizacao=autorizacao, envio=veredicto)
         except Exception as exc:                        # noqa: BLE001
             log.error("ordem em %s rejeitada: %s", sinal.symbol, exc)
+            if self.idempotencia is not None:
+                # Recusa explícita da corretora: não há ordem viva, então a
+                # intenção pode ser liberada para nova tentativa.
+                self.idempotencia.registrar_falha(client_oid, str(exc),
+                                                  agora_ms=agora)
             return ResultadoExecucao(False, f"ordem rejeitada: {exc}",
-                                     autorizacao=autorizacao)
+                                     autorizacao=autorizacao, envio=veredicto)
+
+        if self.idempotencia is not None:
+            self.idempotencia.confirmar(client_oid, ordem, agora_ms=agora)
 
         return ResultadoExecucao(
             True, f"ordem enviada para {sinal.symbol} ({sinal.side.value})",
             posicao=posicao, ordem=ordem if isinstance(ordem, dict) else {},
-            autorizacao=autorizacao)
+            autorizacao=autorizacao, envio=veredicto)
 
     # ------------------------------------------------------------------ fechar
     def fechar(self, symbol: str, preco_atual: float, motivo: str,
