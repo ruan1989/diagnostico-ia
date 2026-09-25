@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InvestAI — Painel de Oportunidades</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0f16'/%3E%3Cpath d='M6 22l6-7 5 4 8-11' stroke='%234b9fff' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<header>
+  <div class="header-row">
+    <div class="logo">Invest<span>AI</span></div>
+    <span id="badge-modo" class="badge badge-paper">simulação</span>
+    <span id="badge-motor" class="badge badge-off"><i class="dot"></i>motor parado</span>
+    <span id="badge-conexao" class="badge badge-off"><i class="dot"></i>sem chave</span>
+    <span id="badge-kill" class="badge badge-warn" style="display:none">kill switch</span>
+    <div class="spacer"></div>
+    <div>
+      <label for="token" style="display:inline;margin-right:6px">Token da API</label>
+      <input id="token" type="password" placeholder="X-API-Token" style="width:180px;display:inline-block"
+             autocomplete="off">
+    </div>
+  </div>
+  <nav>
+    <button data-aba="oportunidades" class="ativo">Oportunidades cripto</button>
+    <button data-aba="matriz">Matriz de mercado</button>
+    <button data-aba="renda">Renda passiva (FII)</button>
+    <button data-aba="validacao">Validação &amp; promoção</button>
+    <button data-aba="portfolio">Portfólio &amp; risco</button>
+    <button data-aba="multiativos">Multiativos</button>
+    <button data-aba="operacao">Operação &amp; Bitget</button>
+    <button data-aba="shadow">Shadow mode</button>
+    <button data-aba="travas">Travas &amp; diagnóstico</button>
+    <button data-aba="historico">Histórico</button>
+    <button data-aba="sistema">Sistema &amp; dados</button>
+  </nav>
+</header>
+
+<main>
+
+<div class="aviso aviso-critico">
+  <strong>Leia antes de usar.</strong>
+  Não existe entrada com acerto garantido em mercado futuro de criptomoedas.
+  Este sistema mede probabilidades em dados históricos e recusa operar quando a
+  evidência é fraca — é isso que ele faz de útil. Os campos
+  &ldquo;probabilidade&rdquo; e &ldquo;retorno esperado&rdquo; são estimativas
+  estatísticas com margem de erro, não promessas de resultado. Futuros com
+  alavancagem podem liquidar a posição e zerar a conta.
+  <span id="aviso-dados"></span>
+</div>
+
+<!-- ======================================================= OPORTUNIDADES -->
+<section class="aba ativa" id="aba-oportunidades">
+  <div class="grid grid-kpi">
+    <div class="card"><div class="card-titulo">Operáveis agora</div>
+      <div class="kpi-valor" id="kpi-operaveis">—</div>
+      <div class="kpi-sub">grade A ou B</div></div>
+    <div class="card"><div class="card-titulo">Em observação</div>
+      <div class="kpi-valor warn" id="kpi-observacao">—</div>
+      <div class="kpi-sub">score bom, sem lastro estatístico</div></div>
+    <div class="card"><div class="card-titulo">Analisados</div>
+      <div class="kpi-valor dim" id="kpi-analisados">—</div>
+      <div class="kpi-sub" id="kpi-duracao">—</div></div>
+    <div class="card"><div class="card-titulo">Melhor expectativa</div>
+      <div class="kpi-valor" id="kpi-expectativa">—</div>
+      <div class="kpi-sub">em múltiplos de risco (R)</div></div>
+  </div>
+
+  <div class="botoes">
+    <button class="btn btn-primario" id="btn-ciclo">Ciclo completo de análise</button>
+    <button class="btn" id="btn-scan">Varredura técnica</button>
+    <button class="btn" id="btn-scan-rapido">Varredura rápida</button>
+  </div>
+  <div class="dim" style="font-size:12.5px;margin-top:8px">
+    O <strong>ciclo completo</strong> passa por qualidade de dados → regime →
+    anomalias → sete agentes → consenso → Risk Engine, e registra o motivo de
+    cada parada. A varredura técnica usa apenas o motor de confluência.
+  </div>
+
+  <details class="ajuda">
+    <summary>Como ler os graus e por que tão poucos sinais passam</summary>
+    <ul>
+      <li><strong>Grade A</strong> — confluência técnica alta <em>e</em> a
+        estratégia tem histórico medido positivo naquele par e direção.</li>
+      <li><strong>Grade B</strong> — confluência boa, estatística aceitável.
+        Operável.</li>
+      <li><strong>Grade C</strong> — técnica interessante, mas a amostra
+        histórica é pequena ou o desempenho medido não passou nos mínimos.
+        O motor <em>não</em> envia ordem. Fica só para acompanhamento.</li>
+      <li><strong>Rejeitado</strong> — não passou no score mínimo, ou reprovou
+        em filtro duro (volatilidade extrema, liquidez baixa, R:R ruim).</li>
+    </ul>
+    <p>Poucos sinais é o comportamento correto. Um sistema que aponta
+      oportunidade em 20 pares ao mesmo tempo está medindo ruído.</p>
+  </details>
+
+  <div class="secao-titulo">Sinais operáveis <span class="contagem" id="cont-operaveis">0</span></div>
+  <div class="grid grid-sinais" id="lista-operaveis"><div class="vazio">Clique em &ldquo;Varrer mercado&rdquo;.</div></div>
+
+  <div class="secao-titulo">Em observação — não operados automaticamente <span class="contagem" id="cont-observacao">0</span></div>
+  <div class="grid grid-sinais" id="lista-observacao"><div class="vazio">—</div></div>
+
+  <div class="secao-titulo">Rejeitados, com o motivo <span class="contagem" id="cont-rejeitados">0</span></div>
+  <div class="card dim" style="font-size:12.5px;margin-bottom:10px">
+    Esta seção existe porque a informação completa não é &ldquo;o sistema
+    achou 3 oportunidades&rdquo;: é que analisou N pares e rejeitou a maioria,
+    por estes motivos. Sem isso não se distingue um sistema seletivo de um
+    sistema que não achou nada.
+  </div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr><th>Par</th><th>Etapa final</th><th>Decisão</th>
+        <th>Categoria</th><th>Motivo</th></tr></thead>
+      <tbody id="tbody-rejeitados"><tr><td colspan="5" class="vazio">—</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================= MATRIZ -->
+<section class="aba" id="aba-matriz">
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-titulo">Panorama de todas as criptomoedas do universo</div>
+    <div class="dim" style="font-size:12.5px">
+      Cada linha mostra o estado atual do par e o score de confluência para os
+      dois lados. Score alto em <em>um</em> lado com regime contrário é motivo
+      para desconfiar, não para entrar.
+    </div>
+  </div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Par</th><th>Preço</th><th>Regime</th><th>RSI</th><th>ADX</th>
+        <th>ATR %</th><th>Vol 24h</th><th>Funding</th>
+        <th>Score long</th><th>Score short</th><th>Melhor</th>
+      </tr></thead>
+      <tbody id="tbody-matriz">
+        <tr><td colspan="11" class="vazio">Faça uma varredura na primeira aba.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================== RENDA -->
+<section class="aba" id="aba-renda">
+  <div class="aviso" id="aviso-fii">
+    <strong>Fonte dos dados.</strong> <span id="fii-fonte-texto">carregando…</span>
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-titulo">Simulador de carteira de renda</div>
+    <div class="form-grid">
+      <div><label for="fii-capital">Capital a aplicar (R$)</label>
+        <input id="fii-capital" type="number" value="50000" min="100" step="100"></div>
+      <div><label for="fii-maxfundo">Máximo por fundo (%)</label>
+        <input id="fii-maxfundo" type="number" value="20" min="5" max="100" step="1"></div>
+      <div><label for="fii-minscore">Score mínimo</label>
+        <input id="fii-minscore" type="number" value="62" min="0" max="100" step="1"></div>
+      <div><label for="fii-maxfundos">Quantidade de fundos</label>
+        <input id="fii-maxfundos" type="number" value="8" min="1" max="30" step="1"></div>
+    </div>
+    <div class="botoes">
+      <button class="btn btn-primario" id="btn-carteira">Montar carteira</button>
+      <button class="btn" id="btn-fiis">Recarregar ranking</button>
+    </div>
+    <div id="resultado-carteira"></div>
+  </div>
+
+  <div class="secao-titulo">Ranking de FIIs <span class="contagem" id="cont-fiis">0</span></div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Segmento</th><th>Score</th><th>Classificação</th>
+        <th>Preço</th><th>DY 12m</th><th>P/VP</th><th>Vacância</th>
+        <th>Liquidez/dia</th><th>Renda /R$1k</th><th>Alertas</th>
+      </tr></thead>
+      <tbody id="tbody-fiis"><tr><td colspan="11" class="carregando">carregando…</td></tr></tbody>
+    </table>
+  </div>
+  <div id="detalhe-fii"></div>
+</section>
+
+<!-- =========================================================== OPERAÇÃO -->
+<section class="aba" id="aba-operacao">
+  <div class="aviso aviso-critico">
+    <strong>Sobre &ldquo;deixar logado&rdquo;.</strong>
+    Automação na Bitget funciona com <em>chave de API</em>, não com a senha da
+    sua conta — e este sistema nunca pede essa senha. Crie a chave em
+    <code>Bitget → API Management</code> com permissão de <strong>leitura</strong> e
+    <strong>trade em futuros</strong>, e deixe <strong>saque e transferência
+    desabilitados</strong>. Assim, no pior cenário, quem tiver a chave pode
+    operar — mas não pode tirar o dinheiro da sua conta.
+  </div>
+
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(340px,1fr))">
+    <div class="card">
+      <div class="card-titulo">1. Conectar chave de API</div>
+      <div class="form-grid" style="grid-template-columns:1fr">
+        <div><label for="bg-key">API Key</label><input id="bg-key" class="mono" autocomplete="off"></div>
+        <div><label for="bg-secret">API Secret</label><input id="bg-secret" type="password" autocomplete="off"></div>
+        <div><label for="bg-pass">Passphrase da API</label><input id="bg-pass" type="password" autocomplete="off"></div>
+        <div><label for="bg-master">Senha mestra (cifra a chave neste computador)</label>
+          <input id="bg-master" type="password" autocomplete="off"></div>
+      </div>
+      <div class="botoes">
+        <button class="btn btn-primario" id="btn-conectar">Conectar e salvar</button>
+        <button class="btn" id="btn-destravar">Destravar chave salva</button>
+        <button class="btn btn-perigo" id="btn-apagar-cred">Apagar chave</button>
+      </div>
+      <div class="msg" id="msg-bitget"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-titulo">2. Motor autônomo</div>
+      <div class="dim" style="font-size:12.5px;margin-bottom:10px">
+        O motor começa sempre em <strong>simulação</strong>. Para enviar ordens
+        reais é preciso armar explicitamente, digitando a frase de confirmação.
+      </div>
+      <div class="botoes">
+        <button class="btn btn-primario" id="btn-motor-iniciar">Iniciar motor</button>
+        <button class="btn" id="btn-motor-parar">Parar</button>
+        <button class="btn" id="btn-motor-ciclo">Rodar 1 ciclo</button>
+      </div>
+      <div style="margin-top:14px">
+        <label for="confirma-live">Frase de confirmação para modo real</label>
+        <input id="confirma-live" placeholder="digite a frase exibida abaixo" autocomplete="off">
+        <div class="faint mono" style="font-size:11px;margin-top:4px" id="frase-live">—</div>
+      </div>
+      <div class="botoes">
+        <button class="btn btn-perigo" id="btn-armar">Armar modo real</button>
+        <button class="btn" id="btn-desarmar">Desarmar</button>
+      </div>
+      <div class="msg" id="msg-motor"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-titulo">3. Risco e emergência</div>
+      <div id="painel-risco"></div>
+      <div class="botoes">
+        <button class="btn btn-perigo" id="btn-fechar-tudo">Fechar todas as posições</button>
+        <button class="btn" id="btn-rearmar">Rearmar kill switch</button>
+      </div>
+      <div class="msg" id="msg-risco"></div>
+    </div>
+  </div>
+
+  <div class="secao-titulo">Posições abertas <span class="contagem" id="cont-posicoes">0</span></div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Par</th><th>Lado</th><th>Tamanho</th><th>Entrada</th><th>Stop</th>
+        <th>Alvos</th><th>Notional</th><th>Risco</th><th>Alvos batidos</th>
+        <th>Modo</th><th></th>
+      </tr></thead>
+      <tbody id="tbody-posicoes"><tr><td colspan="11" class="vazio">nenhuma posição aberta</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+
+<!-- ========================================================== VALIDAÇÃO -->
+<section class="aba" id="aba-validacao">
+  <div class="aviso">
+    <strong>Um resultado bom no histórico não libera nada.</strong>
+    Toda estratégia percorre sete fases, e as três últimas exigem execução em
+    tempo real — não podem ser vencidas por backtest. O pipeline abaixo roda
+    walk-forward, Monte Carlo e detecção de overfitting, e aplica os gates.
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-titulo">Rodar validação</div>
+    <div class="form-grid">
+      <div><label for="v-symbol">Par</label>
+        <input id="v-symbol" value="BTCUSDT" class="mono"></div>
+      <div><label for="v-tf">Timeframe</label>
+        <select id="v-tf"><option>1H</option><option>4H</option><option>15m</option></select></div>
+      <div><label for="v-lado">Direção</label>
+        <select id="v-lado"><option value="long">compra</option><option value="short">venda</option></select></div>
+      <div><label for="v-barras">Barras de histórico</label>
+        <input id="v-barras" type="number" value="6000" min="1000" max="20000" step="500"></div>
+      <div><label for="v-ciclos">Ciclos de walk-forward</label>
+        <input id="v-ciclos" type="number" value="4" min="2" max="10"></div>
+      <div><label for="v-score">Score mínimo</label>
+        <input id="v-score" type="number" value="66" min="0" max="100"></div>
+    </div>
+    <div class="botoes">
+      <button class="btn btn-primario" id="btn-validar">Validar estratégia</button>
+      <button class="btn" id="btn-estrategias">Recarregar registro</button>
+    </div>
+    <div class="msg" id="msg-validacao"></div>
+  </div>
+
+  <div id="resultado-validacao"></div>
+
+  <div class="secao-titulo">Pipeline de fases</div>
+  <div class="card" id="pipeline-fases"><div class="carregando">carregando…</div></div>
+
+  <div class="secao-titulo">Estratégias registradas <span class="contagem" id="cont-estrategias">0</span></div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr><th>Chave</th><th>Fase</th><th>Hash dos parâmetros</th>
+        <th>Operável em real</th><th>Último gate</th><th>Transições</th></tr></thead>
+      <tbody id="tbody-estrategias"><tr><td colspan="6" class="vazio">nenhuma estratégia registrada</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ========================================================== PORTFÓLIO -->
+<section class="aba" id="aba-portfolio">
+  <div class="grid grid-kpi">
+    <div class="card"><div class="card-titulo">Posições</div>
+      <div class="kpi-valor" id="p-posicoes">—</div></div>
+    <div class="card"><div class="card-titulo">Apostas independentes</div>
+      <div class="kpi-valor" id="p-apostas">—</div>
+      <div class="kpi-sub">pela correlação medida</div></div>
+    <div class="card"><div class="card-titulo">Correlação média</div>
+      <div class="kpi-valor" id="p-corr">—</div>
+      <div class="kpi-sub" id="p-corr-cauda">—</div></div>
+    <div class="card"><div class="card-titulo">Pior cenário de estresse</div>
+      <div class="kpi-valor" id="p-stress">—</div>
+      <div class="kpi-sub" id="p-stress-nome">—</div></div>
+  </div>
+
+  <div class="botoes">
+    <button class="btn btn-primario" id="btn-portfolio">Analisar portfólio</button>
+    <button class="btn" id="btn-stress">Rodar stress test</button>
+  </div>
+
+  <div id="aviso-diversificacao"></div>
+
+  <div class="secao-titulo">Matriz de correlação</div>
+  <div class="card dim" style="font-size:12.5px;margin-bottom:10px">
+    A coluna <strong>cauda</strong> é dependência de cauda por co-excedência
+    (0 = independentes nas quedas, 1 = caem sempre juntos). Não é Pearson
+    condicionado, que seria enviesado para baixo por truncamento de variância
+    e sugeriria proteção onde não há.
+  </div>
+  <div class="tabela-wrap" id="matriz-correlacao"><div class="vazio">sem posições abertas</div></div>
+
+  <div class="secao-titulo">Teste de estresse</div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr><th>Cenário</th><th>Perda planejada</th><th>Perda realista</th>
+        <th>Amplificação</th><th>Drawdown</th><th>Stops furados</th><th>Sobrevive</th></tr></thead>
+      <tbody id="tbody-stress"><tr><td colspan="7" class="vazio">rode o stress test</td></tr></tbody>
+    </table>
+  </div>
+  <div id="stress-avisos"></div>
+</section>
+
+<!-- ======================================================== MULTIATIVOS -->
+<section class="aba" id="aba-multiativos">
+  <div class="aviso">
+    <strong>Comparar classes por rentabilidade nominal engana.</strong>
+    &ldquo;O CDB paga 13% e o FII 9%&rdquo; compara números que não são
+    comparáveis: tributação, volatilidade, risco de crédito, liquidez e
+    horizonte diferem. A tabela abaixo converte tudo para retorno real
+    líquido ajustado a risco — e o risco de crédito entra no denominador,
+    porque volatilidade não mede inadimplência.
+  </div>
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-titulo">Renda fixa: comparação por retorno real líquido</div>
+    <div class="form-grid">
+      <div><label for="rf-cdi">CDI (% a.a.)</label><input id="rf-cdi" type="number" value="10.5" step="0.1"></div>
+      <div><label for="rf-ipca">IPCA (% a.a.)</label><input id="rf-ipca" type="number" value="4.2" step="0.1"></div>
+      <div><label for="rf-valor">Valor aplicado (R$)</label><input id="rf-valor" type="number" value="50000" step="1000"></div>
+    </div>
+    <div class="botoes"><button class="btn btn-primario" id="btn-rf">Comparar títulos de exemplo</button></div>
+    <div class="msg" id="msg-rf"></div>
+  </div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr><th>Título</th><th>Bruto</th><th>Líquido</th><th>Real</th>
+        <th>IR</th><th>Duration</th><th>FGC</th><th>Score</th><th>Alertas</th></tr></thead>
+      <tbody id="tbody-rf"><tr><td colspan="9" class="vazio">—</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="secao-titulo">Comparação entre classes de ativos</div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="form-grid">
+      <div><label for="cc-horizonte">Horizonte (meses)</label><input id="cc-horizonte" type="number" value="36" min="1"></div>
+      <div><label for="cc-dd">Tolerância a drawdown (%)</label><input id="cc-dd" type="number" value="15" min="1"></div>
+      <div><label for="cc-liq">Liquidez necessária (dias)</label><input id="cc-liq" type="number" value="30" min="0"></div>
+      <div><label for="cc-objetivo">Objetivo</label>
+        <select id="cc-objetivo"><option value="crescimento">crescimento</option>
+          <option value="renda">renda</option><option value="preservacao">preservação</option></select></div>
+    </div>
+    <div class="botoes"><button class="btn btn-primario" id="btn-comparar-classes">Comparar</button></div>
+  </div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr><th>Candidato</th><th>Classe</th><th>Nominal</th><th>Líquido</th>
+        <th>Real</th><th>Risco total</th><th>Ret/risco</th><th>Piso pessimista</th></tr></thead>
+      <tbody id="tbody-classes"><tr><td colspan="8" class="vazio">—</td></tr></tbody>
+    </table>
+  </div>
+  <div id="classes-conclusao"></div>
+
+  <div class="secao-titulo">Ações e ETFs</div>
+  <div class="card" id="card-acoes">
+    <div class="dim" style="font-size:12.5px">
+      Análise de ação exige dados fundamentalistas. Consulte a aba
+      <em>Sistema &amp; dados</em> para ver o que está configurado.
+    </div>
+    <div class="botoes">
+      <button class="btn" id="btn-acao-teste">Testar análise de ação (sem fonte)</button>
+    </div>
+    <div id="resultado-acao"></div>
+  </div>
+</section>
+
+<!-- =========================================================== SISTEMA -->
+<section class="aba" id="aba-sistema">
+  <div class="aviso">
+    <strong>O que o sistema não sabe está declarado aqui.</strong>
+    Combinação de classe e tipo de dado sem provedor conectado devolve
+    <code>FONTE NÃO CONFIGURADA</code>. A interface nunca preenche o espaço
+    com um número plausível.
+  </div>
+
+  <div class="grid grid-kpi">
+    <div class="card"><div class="card-titulo">Saúde geral</div>
+      <div class="kpi-valor" id="s-saude">—</div>
+      <div class="kpi-sub" id="s-pode-abrir">—</div></div>
+    <div class="card"><div class="card-titulo">Provedores conectados</div>
+      <div class="kpi-valor" id="s-provedores">—</div></div>
+    <div class="card"><div class="card-titulo">Lacunas de cobertura</div>
+      <div class="kpi-valor warn" id="s-lacunas">—</div>
+      <div class="kpi-sub">combinações sem fonte</div></div>
+    <div class="card"><div class="card-titulo">Alertas urgentes</div>
+      <div class="kpi-valor neg" id="s-alertas">—</div></div>
+  </div>
+
+  <div class="botoes">
+    <button class="btn btn-primario" id="btn-sistema">Verificar sistema</button>
+    <button class="btn btn-perigo" id="btn-halt">TRADING HALT</button>
+    <button class="btn" id="btn-retomar">Retomar operação</button>
+  </div>
+  <div class="msg" id="msg-sistema"></div>
+
+  <div class="secao-titulo">Componentes</div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr><th>Componente</th><th>Crítico</th><th>Estado</th>
+        <th>Falhas seguidas</th><th>Latência</th><th>Último erro</th></tr></thead>
+      <tbody id="tbody-componentes"><tr><td colspan="6" class="carregando">—</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="secao-titulo">Provedores de dados</div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr><th>Provedor</th><th>Estado</th><th>Classes</th>
+        <th>Tipos de dado</th><th>Como configurar</th></tr></thead>
+      <tbody id="tbody-provedores"><tr><td colspan="5" class="carregando">—</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="secao-titulo">Proibições estruturais do Risk Engine</div>
+  <div class="card" id="lista-proibicoes"><div class="carregando">—</div></div>
+
+  <div class="secao-titulo">Relatório diário</div>
+  <div class="botoes"><button class="btn btn-primario" id="btn-relatorio">Gerar relatório diário</button></div>
+  <div class="card" style="margin-top:10px">
+    <pre id="texto-relatorio" class="mono" style="white-space:pre-wrap;font-size:11.5px;margin:0;color:var(--text-dim)">—</pre>
+  </div>
+</section>
+
+<!-- ========================================================== HISTÓRICO -->
+<section class="aba" id="aba-shadow">
+  <div class="aviso">
+    <strong>O sistema decide, registra e não envia ordem.</strong> Cada decisão
+    abaixo foi carimbada <em>antes</em> de o preço andar; nos ciclos seguintes o
+    sistema confere o que o mercado fez com ela. Nenhum ajuste posterior de
+    parâmetro melhora estes números — é essa a diferença entre shadow mode e
+    backtest.
+  </div>
+
+  <div class="grid grid-kpi">
+    <div class="card"><div class="card-titulo">Decisões registradas</div>
+      <div class="kpi-valor" id="sh-total">—</div>
+      <div class="kpi-sub" id="sh-pendentes">—</div></div>
+    <div class="card"><div class="card-titulo">Expectativa medida</div>
+      <div class="kpi-valor" id="sh-ev">—</div>
+      <div class="kpi-sub">por decisão, em R</div></div>
+    <div class="card"><div class="card-titulo">Taxa de acerto</div>
+      <div class="kpi-valor dim" id="sh-wr">—</div>
+      <div class="kpi-sub" id="sh-ganhos">—</div></div>
+    <div class="card"><div class="card-titulo">Dias corridos</div>
+      <div class="kpi-valor dim" id="sh-dias">—</div>
+      <div class="kpi-sub" id="sh-conclusivo">—</div></div>
+  </div>
+
+  <div class="botoes">
+    <button class="btn btn-primario" id="btn-shadow">Atualizar</button>
+    <button class="btn" id="btn-shadow-liquidar">Conferir pendentes agora</button>
+  </div>
+  <div class="msg" id="msg-shadow"></div>
+  <div id="sh-avisos"></div>
+
+  <h3>Decisões registradas</h3>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Par</th><th>Lado</th><th>Decidida em</th><th>Entrada</th>
+        <th>Stop</th><th>Alvo</th><th>Estado</th><th>Resultado</th><th>Motivo</th>
+      </tr></thead>
+      <tbody id="tbody-shadow"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="aba" id="aba-travas">
+  <div class="aviso">
+    <strong>Esta aba mostra o que impede uma ordem real de sair.</strong>
+    São quatro travas independentes, em série: a fase da estratégia, a
+    parada de emergência, a idempotência de envio e a reconciliação com a
+    corretora. Qualquer uma delas fechada bloqueia o envio — e o motivo de
+    cada bloqueio aparece escrito, em vez de só "bloqueado".
+  </div>
+
+  <div class="grid grid-kpi">
+    <div class="card"><div class="card-titulo">Estratégia no ar</div>
+      <div class="kpi-valor kpi-texto" id="tr-chave">—</div>
+      <div class="kpi-sub" id="tr-fase">—</div></div>
+    <div class="card"><div class="card-titulo">Parada de emergência</div>
+      <div class="kpi-valor" id="tr-trava">—</div>
+      <div class="kpi-sub" id="tr-trava-motivo">—</div></div>
+    <div class="card"><div class="card-titulo">Envios pendentes</div>
+      <div class="kpi-valor" id="tr-envios">—</div>
+      <div class="kpi-sub">intenções sem destino conhecido</div></div>
+    <div class="card"><div class="card-titulo">Ambiente</div>
+      <div class="kpi-valor" id="tr-ambiente">—</div>
+      <div class="kpi-sub" id="tr-ambiente-sub">—</div></div>
+  </div>
+
+  <div class="botoes">
+    <button class="btn btn-primario" id="btn-travas">Atualizar</button>
+    <button class="btn" id="btn-diagnostico">Rodar diagnóstico</button>
+    <button class="btn" id="btn-reconciliar">Conferir contra a corretora</button>
+    <button class="btn btn-perigo" id="btn-parar-tudo">Parada de emergência</button>
+  </div>
+  <div class="msg" id="msg-travas"></div>
+
+  <h3>Guarda de fase</h3>
+  <p class="nota" id="tr-guarda-nota">—</p>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Estratégia</th><th>Fase</th><th>Opera real</th>
+        <th class="td-texto">O que essa fase mede</th>
+      </tr></thead>
+      <tbody id="tbody-guarda-estrategias"></tbody>
+    </table>
+  </div>
+
+  <h3>Propostas aguardando confirmação</h3>
+  <p class="nota">
+    No modo assistido o sistema monta a ordem e espera um humano. Confirmar
+    uma não confirma a próxima, e a confirmação expira.
+  </p>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Par</th><th>Lado</th><th>Entrada</th><th>Stop</th>
+        <th>Tamanho</th><th>Risco</th><th></th>
+      </tr></thead>
+      <tbody id="tbody-propostas"></tbody>
+    </table>
+  </div>
+
+  <h3>Diagnóstico</h3>
+  <pre class="bloco" id="tr-diagnostico">clique em "Rodar diagnóstico"</pre>
+
+  <h3>Reconciliação com a corretora</h3>
+  <pre class="bloco" id="tr-reconciliacao">ainda não conferido nesta sessão</pre>
+</section>
+
+<section class="aba" id="aba-historico">
+  <div class="grid grid-kpi">
+    <div class="card"><div class="card-titulo">Operações realizadas</div>
+      <div class="kpi-valor" id="h-trades">—</div></div>
+    <div class="card"><div class="card-titulo">Taxa de acerto real</div>
+      <div class="kpi-valor" id="h-winrate">—</div>
+      <div class="kpi-sub">medida, não estimada</div></div>
+    <div class="card"><div class="card-titulo">Resultado líquido</div>
+      <div class="kpi-valor" id="h-pnl">—</div>
+      <div class="kpi-sub" id="h-taxas">—</div></div>
+    <div class="card"><div class="card-titulo">Profit factor</div>
+      <div class="kpi-valor" id="h-pf">—</div>
+      <div class="kpi-sub" id="h-exp">—</div></div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="card-titulo">Curva de capital</div>
+    <svg class="sparkline" id="svg-equity" viewBox="0 0 800 52" preserveAspectRatio="none"></svg>
+  </div>
+
+  <div class="secao-titulo">Operações</div>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Par</th><th>Lado</th><th>Entrada</th><th>Saída</th><th>PnL US$</th>
+        <th>PnL R</th><th>Motivo</th><th>Taxas</th><th>Fechado em</th><th>Modo</th>
+      </tr></thead>
+      <tbody id="tbody-trades"><tr><td colspan="10" class="vazio">nenhuma operação registrada</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="secao-titulo">Registro de auditoria</div>
+  <div class="card" id="lista-eventos"><div class="vazio">—</div></div>
+</section>
+
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
