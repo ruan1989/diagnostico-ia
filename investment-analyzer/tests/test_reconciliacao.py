@@ -7,8 +7,6 @@ contra um capital que não existe, ou achar que há proteção onde não há.
 
 A regra sob teste é sempre a mesma: divergência PAUSA, não corrige.
 """
-import pytest
-
 from investai.models import Position, Side
 from investai.ops.comandos import TravaOperacao
 from investai.ops.reconciliacao import (

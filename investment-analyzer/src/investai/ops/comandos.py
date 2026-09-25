@@ -299,6 +299,23 @@ def diagnostico(estado: Any, *, agora_ms: int | None = None) -> Diagnostico:
                       f"{r.perdas_consecutivas} perda(s) consecutiva(s)")
     d.checagens.append(_checar("gestão de risco", risco, bloqueia=True))
 
+    # ------------------------------------------------- canal de alertas
+    def canal():
+        n = getattr(st, "notificador", None)
+        if n is None:
+            return False, "notificador não montado neste processo"
+        e = n.estado()
+        if not e["configurado"]:
+            return False, ("nenhum canal externo configurado: alertas ficam "
+                           "só no painel, e ninguém vê o painel dormindo")
+        if e["falhas"]:
+            ultima = (e["ultima_falha"] or {}).get("erro", "sem detalhe")
+            return False, (f"{e['falhas']} falha(s) de entrega no canal "
+                           f"externo; a última foi: {ultima}. Um canal que "
+                           f"falha em silêncio é pior que não ter canal")
+        return True, f"canal externo ativo ({e['transporte']})"
+    d.checagens.append(_checar("canal de alertas", canal))
+
     # ---------------------------------------------------------- shadow
     def shadow():
         r = st.shadow.resumo().to_dict()

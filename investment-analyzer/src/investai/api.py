@@ -51,6 +51,7 @@ from .portfolio import (
     rodar_stress_test,
 )
 from .reporting import BlocoDesempenho, CentralDeAlertas, Journal
+from .reporting.notificacao import Notificador, telegram_do_ambiente
 from .risk import RiskEngine
 from .strategies import (
     CriteriosPromocao, Fase, StrategyRegistry, )
@@ -290,6 +291,10 @@ class AppState:
             registro_modelos=self.modelos,
             historico_opinioes=self.historico_opinioes)
         self.alertas = CentralDeAlertas()
+        # Canal externo. Só existe se TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID
+        # estiverem no ambiente — segredo nunca vem de arquivo do
+        # repositório, a mesma regra das chaves da corretora.
+        self.notificador = Notificador(telegram_do_ambiente())
         self.journal = Journal()
         self.strategies = StrategyRegistry()
         self.monitor = monitor_padrao(
@@ -786,6 +791,22 @@ def criar_app(state: AppState | None = None) -> FastAPI:
         if not res.get("ok"):
             raise HTTPException(400, res.get("motivo", "proposta inexistente"))
         return {"mensagem": res.get("motivo", ""), "resultado": res}
+
+    # --------------------------------------------------------- notificações
+    @app.get("/api/notificacoes")
+    def notificacoes_estado() -> dict[str, Any]:
+        return {
+            **st.notificador.estado(),
+            "como_configurar": (
+                "defina TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no ambiente. O "
+                "token nunca entra em arquivo do repositório, pela mesma "
+                "razão que a chave da corretora não entra."),
+        }
+
+    @app.post("/api/notificacoes/testar", dependencies=protegido)
+    def notificacoes_testar() -> dict[str, Any]:
+        """Prova que o canal funciona. É o único jeito honesto de saber."""
+        return st.notificador.testar()
 
     # ------------------------------------------------------------- ambiente
     @app.get("/api/ambiente")

@@ -37,3 +37,14 @@ __all__ += [
     "agregar", "calcular", "comparar_grupos", "comparar_origens",
     "separar_por_origem",
 ]
+from .notificacao import (
+    JANELA_DEDUP_PADRAO_MS, TETO_POR_HORA_PADRAO, Entrega, Notificador,
+    TransporteMemoria, TransporteTelegram, formatar as formatar_notificacao,
+    telegram_do_ambiente,
+)
+
+__all__ += [
+    "Entrega", "JANELA_DEDUP_PADRAO_MS", "Notificador",
+    "TETO_POR_HORA_PADRAO", "TransporteMemoria", "TransporteTelegram",
+    "formatar_notificacao", "telegram_do_ambiente",
+]

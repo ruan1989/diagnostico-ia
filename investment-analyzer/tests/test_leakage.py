@@ -219,7 +219,8 @@ def test_pega_rotulador_que_ignora_o_horizonte():
     serie = parada + movimento
 
     def rot(vs, i):
-        entry = 100.0
+        # Entrada fixa em 100 para que o plano seja o mesmo em todo índice
+        # testado; o que varia aqui é só quando o alvo é tocado.
         stop, alvo = 98.0, 104.0
         for n, v in enumerate(vs[i + 1:], start=1):
             if v.low <= stop:
