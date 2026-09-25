@@ -103,6 +103,7 @@ document.querySelectorAll("nav button").forEach((b) => {
     if (b.dataset.aba === "historico") carregarHistorico();
     if (b.dataset.aba === "operacao") carregarStatus();
     if (b.dataset.aba === "shadow") carregarShadow();
+    if (b.dataset.aba === "travas") carregarTravas();
   });
 });
 
@@ -1422,4 +1423,174 @@ document.querySelectorAll("nav button").forEach((b) => {
     if (aba === "portfolio") carregarPortfolio();
     if (aba === "sistema") carregarSistema();
   });
+});
+
+/* --------------------------------------------------- travas e diagnóstico */
+/* Esta aba mostra o que IMPEDE uma ordem real de sair. São quatro travas
+   independentes em série, e o valor da tela está em mostrar o MOTIVO de cada
+   bloqueio — "bloqueado" sem motivo é o tipo de mensagem que o operador
+   aprende a ignorar. */
+function corDaTrava(ativa) {
+  return ativa ? "neg" : "";
+}
+
+async function carregarTravas() {
+  try {
+    const [g, e, a, n] = await Promise.all([
+      api("/api/guarda"),
+      api("/api/envios"),
+      api("/api/ambiente"),
+      api("/api/reconciliacao"),
+    ]);
+
+    const guarda = g.guarda || {};
+    const versao = guarda.versao || null;
+    $("tr-chave").textContent = guarda.chave_vinculada || "nenhuma";
+    $("tr-chave").className = "kpi-valor kpi-texto" + (versao ? "" : " dim");
+    $("tr-fase").textContent = versao
+      ? `fase ${versao.fase}` + (versao.faltam_fases && versao.faltam_fases.length
+          ? ` · faltam ${versao.faltam_fases.join(", ")}` : "")
+      : "sem estratégia vinculada, o modo real não arma";
+
+    const travada = !!guarda.trava_ativa;
+    $("tr-trava").textContent = travada ? "ATIVA" : "livre";
+    $("tr-trava").className = "kpi-valor " + (travada ? "neg" : "dim");
+    $("tr-trava-motivo").textContent = travada
+      ? (guarda.trava_motivo || "sem motivo registrado")
+      : "nenhuma parada em vigor";
+
+    const pendentes = (e.idempotencia || {}).pendentes || 0;
+    $("tr-envios").textContent = pendentes;
+    $("tr-envios").className = "kpi-valor" + (pendentes ? " neg" : " dim");
+
+    /* Em modo sintético nenhuma ordem sai para lugar nenhum. Mostrar
+       "REAL" em vermelho aqui enquanto o cabeçalho diz SIMULAÇÃO seria
+       contradizer a própria tela — e a contradição faria o operador
+       desconfiar da parte certa. */
+    const sintetico = !!(configApp && configApp.conexao &&
+                         configApp.conexao.modo_dados === "sintetico");
+    if (sintetico) {
+      $("tr-ambiente").textContent = "SIMULAÇÃO";
+      $("tr-ambiente").className = "kpi-valor dim";
+      $("tr-ambiente-sub").textContent =
+        `nenhuma ordem sai; quando conectado seria ${a.ambiente}`;
+    } else {
+      $("tr-ambiente").textContent = (a.ambiente || "?").toUpperCase();
+      $("tr-ambiente").className = "kpi-valor" +
+        (a.ambiente === "demo" ? " dim" : " neg");
+      $("tr-ambiente-sub").textContent = a.descricao || "";
+    }
+
+    $("tr-guarda-nota").textContent = g.aviso || "";
+    const estrategias = g.estrategias || [];
+    /* `tbody-guarda-estrategias`, e não `tbody-estrategias`: este segundo
+       id já existe na aba de Validação. Com o nome repetido,
+       `getElementById` devolvia a tabela DAQUELA aba, e esta ficava vazia
+       enquanto a outra era sobrescrita com marcação de outro formato. */
+    $("tbody-guarda-estrategias").innerHTML = estrategias.length
+      ? estrategias.map((v) => `
+        <tr>
+          <td class="mono">${esc(v.chave)}</td>
+          <td>${esc(v.fase)}</td>
+          <td>${v.operavel_real ? "sim" : "não"}</td>
+          <td class="td-texto">${esc(v.fase_descricao || "")}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="4" class="dim">nenhuma estratégia registrada;
+           nada foi medido ainda</td></tr>`;
+
+    const propostas = g.propostas_pendentes || [];
+    $("tbody-propostas").innerHTML = propostas.length
+      ? propostas.map((p) => `
+        <tr>
+          <td class="mono">${esc(p.symbol)}</td>
+          <td>${p.side === "long" ? "compra" : "venda"}</td>
+          <td>${preco(p.entry)}</td>
+          <td>${preco(p.stop_loss)}</td>
+          <td>${p.size}</td>
+          <td>US$ ${(p.risco_usd || 0).toFixed(2)}</td>
+          <td>
+            <button class="btn btn-perigo" data-confirmar="${esc(p.client_oid)}">
+              confirmar</button>
+            <button class="btn" data-recusar="${esc(p.client_oid)}">recusar</button>
+          </td>
+        </tr>`).join("")
+      : `<tr><td colspan="7" class="dim">nenhuma proposta aguardando</td></tr>`;
+
+    document.querySelectorAll("[data-confirmar]").forEach((b) => {
+      b.addEventListener("click", () => confirmarProposta(b.dataset.confirmar));
+    });
+    document.querySelectorAll("[data-recusar]").forEach((b) => {
+      b.addEventListener("click", () => recusarProposta(b.dataset.recusar));
+    });
+
+    const rec = n.ultimo;
+    if (rec) {
+      $("tr-reconciliacao").textContent =
+        `${rec.veredicto} · local ${rec.posicoes_locais}, ` +
+        `corretora ${rec.posicoes_remotas}\n` +
+        (rec.divergencias || []).map((d) =>
+          `  [${d.pausa ? "PAUSA" : "aviso"}] ${d.symbol} ${d.tipo}: ${d.detalhe}`
+        ).join("\n") + (rec.erro ? `\n  não conferido: ${rec.erro}` : "");
+    }
+  } catch (err) {
+    mostrarMsg("msg-travas", err.message, false);
+  }
+}
+
+async function confirmarProposta(clientOid) {
+  /* A frase é a mesma trava do modo real: confirmar uma ordem que movimenta
+     dinheiro não pode ser um clique distraído. */
+  if (!confirm(
+      "Esta ordem vai para a corretora e movimenta dinheiro real.\n\n" +
+      "Confirmar o envio?")) return;
+  const d = await acao("/api/guarda/confirmar", { client_oid: clientOid },
+                       "msg-travas");
+  if (d) await carregarTravas();
+}
+
+async function recusarProposta(clientOid) {
+  const d = await acao("/api/guarda/recusar",
+                       { client_oid: clientOid, motivo: "recusada no painel" },
+                       "msg-travas");
+  if (d) await carregarTravas();
+}
+
+$("btn-travas").addEventListener("click", carregarTravas);
+
+$("btn-diagnostico").addEventListener("click", async () => {
+  try {
+    const d = await api("/api/diagnostico");
+    $("tr-diagnostico").textContent = d.texto || "";
+    mostrarMsg("msg-travas",
+      d.pode_operar_real
+        ? `sem bloqueios; ${(d.avisos || []).length} aviso(s)`
+        : `${(d.bloqueios || []).length} bloqueio(s): o sistema NÃO deve ` +
+          `operar real agora`,
+      !!d.pode_operar_real);
+  } catch (e) {
+    mostrarMsg("msg-travas", e.message, false);
+  }
+});
+
+$("btn-reconciliar").addEventListener("click", async () => {
+  const d = await acao("/api/reconciliacao/conferir", null, "msg-travas");
+  if (d) {
+    $("tr-reconciliacao").textContent = d.texto || "";
+    await carregarTravas();
+  }
+});
+
+$("btn-parar-tudo").addEventListener("click", async () => {
+  /* Dois passos de propósito: este comando fecha posições a mercado (o que
+     custa spread e taxa) e deixa uma trava que sobrevive a reinício. */
+  if (!confirm(
+      "PARADA DE EMERGÊNCIA\n\n" +
+      "Isto vai:\n" +
+      "  1. travar o envio de novas ordens (a trava sobrevive a reinício);\n" +
+      "  2. desarmar o modo real e parar o motor;\n" +
+      "  3. FECHAR todas as posições a mercado.\n\n" +
+      "Fechar a mercado custa spread e taxa. Continuar?")) return;
+  const d = await acao("/api/operacao/parada-emergencia",
+                       { motivo: "parada pelo painel" }, "msg-travas");
+  if (d) await carregarTravas();
 });

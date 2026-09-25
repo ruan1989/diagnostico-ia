@@ -32,6 +32,7 @@
     <button data-aba="multiativos">Multiativos</button>
     <button data-aba="operacao">Operação &amp; Bitget</button>
     <button data-aba="shadow">Shadow mode</button>
+    <button data-aba="travas">Travas &amp; diagnóstico</button>
     <button data-aba="historico">Histórico</button>
     <button data-aba="sistema">Sistema &amp; dados</button>
   </nav>
@@ -510,6 +511,72 @@
       <tbody id="tbody-shadow"></tbody>
     </table>
   </div>
+</section>
+
+<section class="aba" id="aba-travas">
+  <div class="aviso">
+    <strong>Esta aba mostra o que impede uma ordem real de sair.</strong>
+    São quatro travas independentes, em série: a fase da estratégia, a
+    parada de emergência, a idempotência de envio e a reconciliação com a
+    corretora. Qualquer uma delas fechada bloqueia o envio — e o motivo de
+    cada bloqueio aparece escrito, em vez de só "bloqueado".
+  </div>
+
+  <div class="grid grid-kpi">
+    <div class="card"><div class="card-titulo">Estratégia no ar</div>
+      <div class="kpi-valor kpi-texto" id="tr-chave">—</div>
+      <div class="kpi-sub" id="tr-fase">—</div></div>
+    <div class="card"><div class="card-titulo">Parada de emergência</div>
+      <div class="kpi-valor" id="tr-trava">—</div>
+      <div class="kpi-sub" id="tr-trava-motivo">—</div></div>
+    <div class="card"><div class="card-titulo">Envios pendentes</div>
+      <div class="kpi-valor" id="tr-envios">—</div>
+      <div class="kpi-sub">intenções sem destino conhecido</div></div>
+    <div class="card"><div class="card-titulo">Ambiente</div>
+      <div class="kpi-valor" id="tr-ambiente">—</div>
+      <div class="kpi-sub" id="tr-ambiente-sub">—</div></div>
+  </div>
+
+  <div class="botoes">
+    <button class="btn btn-primario" id="btn-travas">Atualizar</button>
+    <button class="btn" id="btn-diagnostico">Rodar diagnóstico</button>
+    <button class="btn" id="btn-reconciliar">Conferir contra a corretora</button>
+    <button class="btn btn-perigo" id="btn-parar-tudo">Parada de emergência</button>
+  </div>
+  <div class="msg" id="msg-travas"></div>
+
+  <h3>Guarda de fase</h3>
+  <p class="nota" id="tr-guarda-nota">—</p>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Estratégia</th><th>Fase</th><th>Opera real</th>
+        <th class="td-texto">O que essa fase mede</th>
+      </tr></thead>
+      <tbody id="tbody-guarda-estrategias"></tbody>
+    </table>
+  </div>
+
+  <h3>Propostas aguardando confirmação</h3>
+  <p class="nota">
+    No modo assistido o sistema monta a ordem e espera um humano. Confirmar
+    uma não confirma a próxima, e a confirmação expira.
+  </p>
+  <div class="tabela-wrap">
+    <table>
+      <thead><tr>
+        <th>Par</th><th>Lado</th><th>Entrada</th><th>Stop</th>
+        <th>Tamanho</th><th>Risco</th><th></th>
+      </tr></thead>
+      <tbody id="tbody-propostas"></tbody>
+    </table>
+  </div>
+
+  <h3>Diagnóstico</h3>
+  <pre class="bloco" id="tr-diagnostico">clique em "Rodar diagnóstico"</pre>
+
+  <h3>Reconciliação com a corretora</h3>
+  <pre class="bloco" id="tr-reconciliacao">ainda não conferido nesta sessão</pre>
 </section>
 
 <section class="aba" id="aba-historico">

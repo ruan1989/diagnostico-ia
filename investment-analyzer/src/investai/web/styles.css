@@ -269,3 +269,32 @@ code {
   .fator { grid-template-columns: 90px 1fr 42px; }
   .evento { grid-template-columns: 1fr; gap: 2px; }
 }
+/* Bloco de texto pré-formatado: diagnóstico, reconciliação.
+   `pre-wrap` e não `pre` de propósito — a saída do diagnóstico tem linhas
+   longas, e sem quebra a mensagem mais importante é justamente a que fica
+   cortada fora da tela. */
+/* Valor de KPI que é TEXTO, não número: chave de estratégia, nome de
+   ambiente. O tamanho fixo do `.kpi-valor` é pensado para números curtos e
+   corta identificadores longos na borda do cartão. */
+.kpi-valor.kpi-texto {
+  font-size: 17px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.bloco {
+  margin: 8px 0 18px;
+  padding: 12px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 460px;
+  overflow-y: auto;
+}
+

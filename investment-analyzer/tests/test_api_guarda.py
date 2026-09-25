@@ -194,3 +194,65 @@ def test_conferir_sem_conexao_nao_diz_coerente(cliente):
     assert corpo["resultado"]["veredicto"] == "NAO_CONFERIDO"
     assert corpo["resultado"]["consultou"] is False
     assert "RECONCILIAÇÃO" in corpo["texto"]
+
+
+# =====================================================================
+# Contrato com o painel
+#
+# O JavaScript lê campos por nome e não tem verificação de tipo: renomear
+# um campo no servidor não quebra nada até alguém abrir a aba e ver "—".
+# Estes testes fazem o rename quebrar aqui, que é onde dá para consertar.
+# =====================================================================
+def test_contrato_da_aba_travas(cliente):
+    chave = levar_a(cliente.estado, Fase.SHADOW)
+    cliente.post("/api/guarda/vincular", headers=auth(), json={"chave": chave})
+
+    g = cliente.get("/api/guarda").json()
+    assert {"guarda", "propostas_pendentes", "estrategias", "aviso"} <= set(g)
+    assert {"chave_vinculada", "versao", "trava_ativa", "trava_motivo",
+            "em_demo"} <= set(g["guarda"])
+    assert {"chave", "fase", "operavel_real", "faltam_fases"} <= set(
+        g["guarda"]["versao"])
+    assert {"chave", "fase", "operavel_real", "fase_descricao"} <= set(
+        g["estrategias"][0])
+
+    e = cliente.get("/api/envios").json()
+    assert "pendentes" in e["idempotencia"]
+
+    a = cliente.get("/api/ambiente").json()
+    assert {"ambiente", "descricao", "product_type",
+            "exemplo_simbolo"} <= set(a)
+
+    r = cliente.get("/api/reconciliacao").json()
+    assert "ultimo" in r and "tolerancias" in r
+
+    d = cliente.get("/api/diagnostico").json()
+    assert {"texto", "codigo_saida", "bloqueios", "avisos",
+            "pode_operar_real"} <= set(d)
+
+
+def test_propostas_pendentes_tem_os_campos_da_tabela(cliente):
+    """A tabela do painel mostra par, lado, entrada, stop, tamanho e risco.
+
+    Uma proposta sem esses campos renderizaria linhas vazias com botões de
+    confirmar ordem — o pior lugar possível para um defeito de contrato.
+    """
+    from investai.trading.engine import _Proposta
+    from investai.models import Regime, Side, Signal, SignalGrade
+    from investai.risk.manager import DecisaoRisco
+
+    s = Signal(symbol="BTCUSDT", timeframe="1H", side=Side.LONG,
+               grade=SignalGrade.A, score=80.0, entry=64000.0,
+               stop_loss=62000.0, take_profits=[66000.0], risk_reward=1.8,
+               atr=640.0, regime=Regime.TENDENCIA_ALTA)
+    d = DecisaoRisco(True, "ok", size=0.01, notional_usd=640.0,
+                     risco_usd=20.0, alavancagem=1.0)
+    cliente.estado.engine._propostas["iai-teste"] = _Proposta(
+        client_oid="iai-teste", sinal=s, decisao=d,
+        agora_ms=1_700_000_000_000, motivo="aguardando humano")
+
+    propostas = cliente.get("/api/guarda").json()["propostas_pendentes"]
+    assert len(propostas) == 1
+    assert {"client_oid", "symbol", "side", "entry", "stop_loss", "size",
+            "risco_usd", "notional_usd", "grade"} <= set(propostas[0])
+    assert propostas[0]["symbol"] == "BTCUSDT"
